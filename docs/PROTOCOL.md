@@ -1,135 +1,135 @@
-# Protocolo iDotMatrix 32×32
+# iDotMatrix 32x32 Protocol
 
-Este documento resume el protocolo conocido para una matriz iDotMatrix RGB 32×32 accesible por BLE.
+This document summarizes the known protocol for a 32x32 RGB iDotMatrix display accessible over BLE.
 
-El protocolo no está completo. Las partes marcadas como `experimental` o `hipótesis` deben validarse con hardware real y trazas.
+The protocol is not complete. Sections marked as `experimental` or `hypothesis` must be validated with real hardware and traces.
 
 ## BLE
 
-| Campo | Valor |
+| Field | Value |
 |---|---|
-| Nombre BLE esperado | prefijo `IDM-` |
+| Expected BLE name | `IDM-` prefix |
 | Service UUID | `000000fa-0000-1000-8000-00805f9b34fb` |
 | Write UUID | `0000fa02-0000-1000-8000-00805f9b34fb` |
 | Notify UUID | `0000fa03-0000-1000-8000-00805f9b34fb` |
 
-Los paquetes básicos observados no requieren cifrado.
+Observed basic packets do not require encryption.
 
-## Convenciones
+## Conventions
 
-- Los bytes de longitud multi-byte se codifican en little-endian salvo que se indique lo contrario.
-- Los colores se codifican como RGB: `r g b`.
-- En este repo se valida la matriz como 32×32: `x = 0..31`, `y = 0..31`.
-- Los builders de `open_idotmatrix.protocol` devuelven `bytes` puros.
+- Multi-byte length fields are little-endian unless stated otherwise.
+- Colors are encoded as RGB: `r g b`.
+- This repository validates coordinates for a 32x32 matrix: `x = 0..31`, `y = 0..31`.
+- Builders in `open_idotmatrix.protocol` return pure `bytes`.
 
-## Comandos básicos
+## Basic Commands
 
-### Encender
+### Screen On
 
 ```text
 05 00 07 01 01
 ```
 
-### Apagar
+### Screen Off
 
 ```text
 05 00 07 01 00
 ```
 
-### Brillo
+### Brightness
 
 ```text
 05 00 04 80 <brightness>
 ```
 
-Rango probable: `5..100`.
+Likely range: `5..100`.
 
-Ejemplo, 80%:
+Example, 80%:
 
 ```text
 05 00 04 80 50
 ```
 
-### Flip / rotación 180°
+### Flip / 180-Degree Rotation
 
 ```text
 05 00 06 80 <enabled>
 ```
 
-`enabled = 00` normal, `01` rotado.
+`enabled = 00` normal, `01` rotated.
 
-### Freeze / unfreeze
+### Freeze / Unfreeze
 
 ```text
 04 00 03 00
 ```
 
-Estado: inconsistente. No usar como base de funcionalidades críticas hasta validar.
+Status: inconsistent. Do not rely on this for critical features until it is validated.
 
-### Recovery / soft reset
+### Recovery / Soft Reset
 
 ```text
 04 00 03 80
 05 00 04 80 50
 ```
 
-Nota: el segundo paquete coincide con un comando de brillo a 80. En este repo se trata como `reset/recover`, no como factory reset.
+Note: the second packet is identical to brightness 80. This repository treats the operation as `reset/recover`, not as a factory reset.
 
-## Tiempo
+## Time
 
-Formato:
+Format:
 
 ```text
 0b 00 01 80 <year_byte> <month> <day> <dow> <hour> <minute> <second>
 ```
 
-`dow` usa lunes = 1, domingo = 7.
+`dow` uses Monday = 1, Sunday = 7.
 
-Hay dos estrategias conocidas para `year_byte`:
+Two known strategies exist for `year_byte`:
 
-| Estrategia | Cálculo |
+| Strategy | Calculation |
 |---|---|
 | `low_byte` | `year & 0xff` |
 | `two_digit` | `year % 100` |
 
-Este repo usa `low_byte` por defecto, pero expone ambas para pruebas:
+This repository uses `low_byte` by default, but exposes both for testing:
 
 ```bash
 open-idotmatrix --address AA:BB:CC:DD:EE:FF sync-time --year-mode low_byte
 open-idotmatrix --address AA:BB:CC:DD:EE:FF sync-time --year-mode two_digit
 ```
 
-## Pixel / graffiti
+## Pixel / Graffiti
 
-Formato:
+Format:
 
 ```text
 0a 00 05 01 00 <r> <g> <b> <x> <y>
 ```
 
-Ejemplo: píxel rojo en la esquina inferior derecha:
+Example: red pixel in the lower-right corner:
 
 ```text
 0a 00 05 01 00 ff 00 00 1f 1f
 ```
 
-## Color de pantalla completa
+## Full-Screen Color
 
-Formato:
+Format:
 
 ```text
 07 00 02 02 <r> <g> <b>
 ```
 
-Ejemplo: rojo:
+Example: red:
 
 ```text
 07 00 02 02 ff 00 00
 ```
 
-## Reloj
+## Clock
 
-Formato conocido:
+Known format:
 
 ```text
 08 00 06 01 <flags> <r> <g> <b>
@@ -141,219 +141,219 @@ Flags:
 flags = style | (0x80 if visible_date else 0x00) | (0x40 if hour24 else 0x00)
 ```
 
-`style` conocido: `0..7`.
+Known `style`: `0..7`.
 
-## Cronómetro
+## Chronograph
 
 ```text
 05 00 09 80 <mode>
 ```
 
-Modos conocidos:
+Known modes:
 
-| Mode | Acción |
+| Mode | Action |
 |---:|---|
 | 0 | reset |
 | 1 | start/restart |
 | 2 | pause |
 | 3 | continue |
 
-## Cuenta atrás
+## Countdown
 
 ```text
 07 00 08 80 <mode> <minutes> <seconds>
 ```
 
-Modos conocidos:
+Known modes:
 
-| Mode | Acción |
+| Mode | Action |
 |---:|---|
 | 0 | disable |
 | 1 | start |
 | 2 | pause |
 | 3 | restart |
 
-## Marcador
+## Scoreboard
 
 ```text
 08 00 0a 80 <left_lo> <left_hi> <right_lo> <right_hi>
 ```
 
-Puntuaciones recomendadas: `0..999`.
+Recommended scores: `0..999`.
 
-## Eco mode
+## Eco Mode
 
 ```text
 0a 00 02 80 <flag> <start_hour> <start_minute> <end_hour> <end_minute> <brightness>
 ```
 
-Estado: parcialmente conocido.
+Status: partially known.
 
-## Efectos
+## Effects
 
-Formato implementado:
+Implemented format:
 
 ```text
 <length> 00 03 02 <style> <speed> <num_colors> <r1> <g1> <b1> ...
 ```
 
-Estilos conocidos por notas comunitarias:
+Styles known from community notes:
 
-| Style | Descripción tentativa |
+| Style | Tentative description |
 |---:|---|
-| 0 | rainbow horizontal graduado |
-| 1 | píxeles aleatorios de colores sobre negro |
-| 2 | píxeles blancos aleatorios sobre fondo cambiante |
-| 3 | rainbow vertical |
-| 4 | rainbow diagonal derecha |
-| 5 | rainbow diagonal izquierda sobre negro |
-| 6 | píxeles aleatorios de colores |
+| 0 | horizontal gradient rainbow |
+| 1 | random colored pixels on black |
+| 2 | random white pixels on changing background |
+| 3 | vertical rainbow |
+| 4 | diagonal rainbow to the right |
+| 5 | diagonal rainbow to the left on black |
+| 6 | random colored pixels |
 
-## Texto 32×32
+## 32x32 Text
 
-El texto no se envía como UTF-8 plano. Cada carácter se renderiza a un bitmap monocromo de 16×32.
+Text is not sent as plain UTF-8. Each character is rendered to a monochrome 16x32 bitmap.
 
-Cada carácter:
+Each character:
 
 ```text
-05 ff ff ff <64 bytes bitmap>
+05 ff ff ff <64 bitmap bytes>
 ```
 
-El bitmap es row-major y little-endian dentro de cada byte:
+The bitmap is row-major and little-endian within each byte:
 
-- 16 píxeles por fila;
-- 32 filas;
-- 2 bytes por fila;
-- 64 bytes por carácter.
+- 16 pixels per row;
+- 32 rows;
+- 2 bytes per row;
+- 64 bytes per character.
 
-### Paquete completo de texto
+### Complete Text Packet
 
 ```text
-[header 16 bytes] [metadata 14 bytes] [glyph blocks]
+[16-byte header] [14-byte metadata] [glyph blocks]
 ```
 
 Header:
 
-| Offset | Tamaño | Descripción |
+| Offset | Size | Description |
 |---:|---:|---|
-| 0 | 2 | longitud total incluyendo header |
+| 0 | 2 | total length including header |
 | 2 | 1 | `03` |
 | 3 | 1 | `00` |
-| 4 | 1 | marcador de continuación, normalmente `00` |
-| 5 | 4 | longitud de metadata + bitmaps |
-| 9 | 4 | CRC32 de metadata + bitmaps |
+| 4 | 1 | continuation marker, usually `00` |
+| 5 | 4 | metadata + bitmap length |
+| 9 | 4 | CRC32 of metadata + bitmaps |
 | 13 | 2 | `00 00` |
 | 15 | 1 | `0c` |
 
 Metadata:
 
-| Offset | Tamaño | Descripción |
+| Offset | Size | Description |
 |---:|---:|---|
-| 0 | 2 | número de caracteres |
+| 0 | 2 | number of characters |
 | 2 | 1 | `00` |
 | 3 | 1 | `01` |
-| 4 | 1 | modo de texto |
-| 5 | 1 | velocidad |
-| 6 | 1 | modo de color de texto |
-| 7 | 1 | R texto |
-| 8 | 1 | G texto |
-| 9 | 1 | B texto |
-| 10 | 1 | modo de fondo |
-| 11 | 1 | R fondo |
-| 12 | 1 | G fondo |
-| 13 | 1 | B fondo |
+| 4 | 1 | text mode |
+| 5 | 1 | speed |
+| 6 | 1 | text color mode |
+| 7 | 1 | text R |
+| 8 | 1 | text G |
+| 9 | 1 | text B |
+| 10 | 1 | background mode |
+| 11 | 1 | background R |
+| 12 | 1 | background G |
+| 13 | 1 | background B |
 
-Modos de texto conocidos:
+Known text modes:
 
-| Valor | Efecto |
+| Value | Effect |
 |---:|---|
-| 0 | fijo |
-| 1 | scroll izquierda/derecha, según firmware/app |
-| 2 | scroll inverso / RTL |
-| 3 | scroll arriba |
-| 4 | scroll abajo |
-| 5 | strobe / parpadeo |
+| 0 | fixed |
+| 1 | left/right scroll, depending on firmware/app |
+| 2 | reverse scroll / RTL |
+| 3 | scroll up |
+| 4 | scroll down |
+| 5 | strobe / blink |
 | 6 | fade |
 | 7 | falling blocks |
 | 8 | laser / filling |
 
-Modos de color:
+Color modes:
 
-| Valor | Efecto |
+| Value | Effect |
 |---:|---|
-| 0 | desconocido / default app |
-| 1 | RGB fijo |
-| 2 | gradiente azul-rojo |
-| 3 | gradiente pastel |
-| 4 | gradiente rosa-naranja |
-| 5 | desconocido |
+| 0 | unknown / app default |
+| 1 | fixed RGB |
+| 2 | blue-red gradient |
+| 3 | pastel gradient |
+| 4 | pink-orange gradient |
+| 5 | unknown |
 
-Fondo:
+Background:
 
-| Valor | Efecto |
+| Value | Effect |
 |---:|---|
-| 0 | off / negro |
-| 1 | sólido RGB |
+| 0 | off / black |
+| 1 | solid RGB |
 
 ## GIFs
 
-La ruta más útil para imágenes y animaciones es subir GIFs de 32×32.
+The most useful path for images and animations is uploading 32x32 GIFs.
 
-Los GIFs se dividen en chunks de 4096 bytes. Cada chunk de aplicación lleva un header de 16 bytes:
+GIFs are split into 4096-byte chunks. Each application chunk has a 16-byte header:
 
 ```text
-[header 16 bytes] [hasta 4096 bytes GIF]
+[16-byte header] [up to 4096 GIF bytes]
 ```
 
 Header:
 
-| Offset | Tamaño | Descripción |
+| Offset | Size | Description |
 |---:|---:|---|
-| 0 | 2 | longitud de este chunk incluyendo header |
+| 0 | 2 | length of this chunk including header |
 | 2 | 1 | `01` |
 | 3 | 1 | `00` |
-| 4 | 1 | `00` primer chunk, `02` siguientes |
-| 5 | 4 | longitud total, modo a validar |
-| 9 | 4 | CRC32 del GIF completo |
+| 4 | 1 | `00` first chunk, `02` following chunks |
+| 5 | 4 | total length, mode to validate |
+| 9 | 4 | CRC32 of the full GIF |
 | 13 | 1 | `05` |
 | 14 | 1 | `00` |
 | 15 | 1 | `0d` |
 
-Hay dos variantes para el campo `total_length`:
+There are two variants for the `total_length` field:
 
-| Modo | Cálculo |
+| Mode | Calculation |
 |---|---|
 | `include_headers` | `len(gif_bytes) + 16 * num_chunks` |
 | `raw_payload_only` | `len(gif_bytes)` |
 
-El repo usa `include_headers` por defecto, pero permite elegir:
+The repository uses `include_headers` by default, but lets you choose:
 
 ```bash
 open-idotmatrix --address AA:BB:CC:DD:EE:FF gif demo.gif --total-length-mode include_headers
 open-idotmatrix --address AA:BB:CC:DD:EE:FF gif demo.gif --total-length-mode raw_payload_only
 ```
 
-Notificaciones esperadas:
+Expected notifications:
 
 ```text
-05 00 01 00 01 = chunk aceptado / continuar
-05 00 01 00 03 = upload terminado
+05 00 01 00 01 = chunk accepted / continue
+05 00 01 00 03 = upload finished
 ```
 
-## PNG / DIY image
+## PNG / DIY Image
 
-Hay una función experimental `build_png_payloads_experimental`. No está incluida en la API principal porque GIF de un frame debería ser más seguro para imagen fija hasta validar más trazas.
+An experimental `build_png_payloads_experimental` function exists. It is not included in the main API because single-frame GIFs should be safer for still images until more traces are validated.
 
-## Comandos destructivos
+## Destructive Commands
 
-`build_delete_device_data()` existe para documentar el protocolo, pero no debe usarse durante fuzzing o pruebas iniciales.
+`build_delete_device_data()` exists to document the protocol, but it must not be used during fuzzing or initial testing.
 
-## Cómo añadir nuevos comandos
+## How To Add New Commands
 
-1. Captura o deduce bytes.
-2. Añade builder puro en `open_idotmatrix/protocol.py`.
-3. Añade parser en `parse_packet` si aplica.
-4. Añade método de alto nivel en `device.py`.
-5. Añade CLI si es útil.
-6. Añade tests de bytes exactos.
-7. Documenta aquí el formato y el estado: confirmado, experimental o hipótesis.
+1. Capture or infer bytes.
+2. Add a pure builder in `open_idotmatrix/protocol.py`.
+3. Add parser support in `parse_packet` when applicable.
+4. Add a high-level method in `device.py`.
+5. Add CLI support if useful.
+6. Add exact-byte tests.
+7. Document the format and status here: confirmed, experimental, or hypothesis.

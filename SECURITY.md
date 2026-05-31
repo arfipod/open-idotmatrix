@@ -1,20 +1,20 @@
-# Security and safety
+# Security and Safety
 
-Este proyecto controla hardware BLE. Algunas operaciones pueden dejar el dispositivo en un estado extraño o borrar datos.
+This project controls BLE hardware. Some operations can leave the device in an unusual state or delete data.
 
-## No hacer por defecto
+## Do Not Do By Default
 
-- No fuzzear comandos desconocidos en dispositivos que no puedas resetear.
-- No ejecutar `delete_device_data` salvo que se indique explícitamente.
-- No subir logs públicos con direcciones BLE personales si te preocupa la privacidad.
-- No asumir que todos los dispositivos iDotMatrix comparten firmware.
+- Do not fuzz unknown commands on devices you cannot reset.
+- Do not run `delete_device_data` unless explicitly instructed.
+- Do not publish logs containing personal BLE addresses if privacy matters.
+- Do not assume all iDotMatrix devices share the same firmware.
 
-## Reportar problemas
+## Reporting Issues
 
-Para vulnerabilidades o comportamientos peligrosos, abre un issue describiendo:
+For vulnerabilities or dangerous behavior, open an issue describing:
 
-- dispositivo;
-- firmware/app si se conoce;
-- comandos enviados;
-- efecto observado;
-- si es reproducible.
+- device;
+- firmware/app version if known;
+- sent commands;
+- observed effect;
+- whether the issue is reproducible.

@@ -14,7 +14,7 @@ Copy this file to `captures/YYYY-MM-DD-hardware-test.md` when testing a real mat
 - open-idotmatrix commit:
 - Device advertised name:
 - Device address:
-- Matrix size: 32×32
+- Matrix size: 32x32
 - Firmware/app version if known:
 
 ## Results

@@ -409,6 +409,9 @@ def parse_packet(packet: bytes | bytearray) -> dict[str, Any]:
     if packet == build_screen_off():
         result.update(kind="screen_off")
         return result
+    if packet == build_freeze_screen():
+        result.update(kind="freeze_screen")
+        return result
 
     if len(packet) == 5 and packet[0:4] == bytes((0x05, 0x00, 0x04, 0x80)):
         result.update(kind="brightness", brightness=packet[4])
@@ -436,6 +439,47 @@ def parse_packet(packet: bytes | bytearray) -> dict[str, Any]:
         return result
     if len(packet) == 7 and packet[0:4] == bytes((0x07, 0x00, 0x02, 0x02)):
         result.update(kind="fullscreen_color", color=(packet[4], packet[5], packet[6]))
+        return result
+    if len(packet) == 8 and packet[0:4] == bytes((0x08, 0x00, 0x06, 0x01)):
+        flags = packet[4]
+        result.update(
+            kind="clock",
+            style=flags & 0x3F,
+            visible_date=bool(flags & 0x80),
+            hour24=bool(flags & 0x40),
+            color=(packet[5], packet[6], packet[7]),
+        )
+        return result
+    if len(packet) == 5 and packet[0:4] == bytes((0x05, 0x00, 0x09, 0x80)):
+        result.update(kind="chronograph", mode=packet[4])
+        return result
+    if len(packet) == 7 and packet[0:4] == bytes((0x07, 0x00, 0x08, 0x80)):
+        result.update(kind="countdown", mode=packet[4], minutes=packet[5], seconds=packet[6])
+        return result
+    if len(packet) == 8 and packet[0:4] == bytes((0x08, 0x00, 0x0A, 0x80)):
+        result.update(
+            kind="scoreboard",
+            score_left=packet[4] | (packet[5] << 8),
+            score_right=packet[6] | (packet[7] << 8),
+        )
+        return result
+    if len(packet) == 10 and packet[0:4] == bytes((0x0A, 0x00, 0x02, 0x80)):
+        result.update(
+            kind="eco",
+            flag=packet[4],
+            start_hour=packet[5],
+            start_minute=packet[6],
+            end_hour=packet[7],
+            end_minute=packet[8],
+            brightness=packet[9],
+        )
+        return result
+    if len(packet) >= 13 and packet[2:4] == bytes((0x03, 0x02)) and packet[6] * 3 == len(packet) - 7:
+        colors = [tuple(packet[i : i + 3]) for i in range(7, len(packet), 3)]
+        result.update(kind="effect", style=packet[4], speed=packet[5], color_count=packet[6], colors=colors)
+        return result
+    if packet == build_delete_device_data():
+        result.update(kind="delete_device_data")
         return result
 
     if len(packet) >= 16 and packet[2:4] == bytes((0x01, 0x00)) and packet[13:16] == bytes((0x05, 0x00, 0x0D)):

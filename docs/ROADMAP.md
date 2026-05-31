@@ -1,106 +1,107 @@
 # Roadmap
 
-## Objetivo principal
+## Main Goal
 
-Crear una biblioteca Linux-first, abierta y testeable para controlar matrices iDotMatrix 32×32 y, a largo plazo, descifrar el protocolo completo.
+Create an open, testable, Linux-first library for controlling 32x32 iDotMatrix displays and, over time, reverse engineer the full protocol.
 
-## Estado actual incluido en este ZIP
+## Current Status
 
-### Hecho
+### Done
 
-- Paquete Python instalable: `open-idotmatrix`.
+- Installable Python package: `open-idotmatrix`.
 - CLI: `open-idotmatrix`.
-- Builders puros para comandos básicos.
-- Parser/decoder best-effort de paquetes.
-- Transporte BLE async con `bleak`.
-- API de alto nivel `OpenIDotMatrix`.
-- Texto 16×32 con Pillow.
-- GIF processing y chunking 4096+16.
-- Simulador 32×32 con Pillow.
-- Tests unitarios sin hardware.
-- Documentación de protocolo, Linux BLE, simulator, reverse engineering y Codex.
+- Optional Qt desktop app: `open-idotmatrix-qt`.
+- Pure builders for basic commands.
+- Best-effort packet parser/decoder.
+- Async BLE transport with `bleak`.
+- High-level `OpenIDotMatrix` API.
+- 16x32 text with Pillow.
+- GIF processing and 4096+16 chunking.
+- 32x32 simulator with Pillow.
+- Hardware-free unit tests.
+- Protocol, Linux BLE, simulator, reverse engineering, and Codex documentation.
 - GitHub Actions CI.
 
-### Pendiente de validar con hardware real
+### Pending Real-Hardware Validation
 
-- Confirmar que `write_gatt_char` troceado por MTU funciona igual que los prototipos originales.
-- Confirmar si GIF `total_length` debe ser `include_headers` o `raw_payload_only` en tu matriz concreta.
-- Confirmar ACKs exactos durante GIF upload.
-- Confirmar `year_byte` en reloj: `year & 0xff` vs `year % 100`.
-- Confirmar sentido real de modos de texto 1 y 2.
-- Confirmar brillo, flip, freeze y reset/recover en firmware concreto.
+- Confirm that MTU-split `write_gatt_char` behaves like the original prototypes.
+- Confirm whether GIF `total_length` should be `include_headers` or `raw_payload_only` on each concrete matrix.
+- Confirm exact ACKs during GIF upload.
+- Confirm clock `year_byte`: `year & 0xff` vs `year % 100`.
+- Confirm actual direction of text modes 1 and 2.
+- Confirm brightness, flip, freeze, and reset/recover on concrete firmware.
 
-## Fase 1 — Hardware smoke test
+## Phase 1 - Hardware Smoke Test
 
 1. `open-idotmatrix scan`.
 2. `on` / `off`.
 3. `brightness 50`.
 4. `fill 255 0 0`, `fill 0 255 0`, `fill 0 0 255`.
-5. `pixel 0 0`, `pixel 31 0`, `pixel 0 31`, `pixel 31 31` para orientación.
-6. `sync-time` con ambos modos de año.
-7. `text "A"`, `text "Hola"`.
-8. `gif demo.gif` con ACK y sin ACK.
+5. `pixel 0 0`, `pixel 31 0`, `pixel 0 31`, `pixel 31 31` for orientation.
+6. `sync-time` with both year modes.
+7. `text "A"`, `text "Hello"`.
+8. `gif demo.gif` with ACK and without ACK.
 
-Resultado esperado: tabla de compatibilidad por comando.
+Expected result: compatibility table by command.
 
-## Fase 2 — Robustez BLE
+## Phase 2 - BLE Robustness
 
-- Añadir logging estructurado de bytes enviados y notificaciones recibidas.
-- Añadir retry configurable por comando.
-- Añadir reconexión automática si BlueZ corta sesión.
-- Detectar MTU real y comparar write-with-response vs write-without-response.
-- Añadir opción `--dump-session out/session.jsonl`.
+- Add structured logging of sent bytes and received notifications.
+- Add configurable retry per command.
+- Add automatic reconnect if BlueZ drops the session.
+- Detect real MTU and compare write-with-response vs write-without-response.
+- Add `--dump-session out/session.jsonl`.
 
-## Fase 3 — Protocolo de texto completo
+## Phase 3 - Complete Text Protocol
 
-- Confirmar todos los `TextMode`.
-- Confirmar todos los `TextColorMode`.
-- Añadir soporte de texto largo > 4096 bytes si el firmware lo requiere.
-- Explorar tamaño de fuente 16: separador `02 ff ff ff` o variantes.
-- Mejorar simulador para scroll vertical, fade, strobe y falling blocks.
+- Confirm every `TextMode`.
+- Confirm every `TextColorMode`.
+- Add support for text longer than 4096 bytes if firmware requires it.
+- Explore font size 16: separator `02 ff ff ff` or variants.
+- Improve the simulator for vertical scrolling, fade, strobe, and falling blocks.
 
-## Fase 4 — GIF e imagen completa
+## Phase 4 - GIF And Full Image Support
 
-- Validar flow-control por `0500010001` y `0500010003`.
-- Comparar `include_headers` vs `raw_payload_only`.
-- Añadir test de GIF real generado en memoria.
-- Añadir single-frame GIF como modo de imagen fija recomendado.
-- Investigar PNG/DIY y reemplazar `build_png_payloads_experimental` por función confirmada.
+- Validate flow control with `0500010001` and `0500010003`.
+- Compare `include_headers` vs `raw_payload_only`.
+- Add an in-memory real-GIF test.
+- Add single-frame GIF as the recommended still-image mode.
+- Investigate PNG/DIY and replace `build_png_payloads_experimental` with a confirmed function.
 
-## Fase 5 — Reverse engineering sistemático
+## Phase 5 - Systematic Reverse Engineering
 
-- Crear corpus de capturas en `captures/`, ignorado por git si contiene datos grandes.
-- Herramienta `open-idotmatrix decode-capture` para extraer writes BLE.
-- Matriz de comandos app oficial → bytes → efecto visual.
-- Comparar Android app vs paquete generado por esta librería.
-- Documentar unknown bytes con hipótesis y pruebas.
+- Create a capture corpus in `captures/`, ignored by git if it contains large data.
+- Add an `open-idotmatrix decode-capture` tool to extract BLE writes.
+- Build an official-app command -> bytes -> visual-effect matrix.
+- Compare Android app packets against packets generated by this library.
+- Document unknown bytes with hypotheses and tests.
 
-## Fase 6 — Funciones avanzadas
+## Phase 6 - Advanced Features
 
-- Reloj con presets.
-- Scoreboard completo.
-- Countdown y chronograph con API estable.
-- Efectos confirmados.
-- Eco mode confirmado.
-- Modo música / micrófono si el firmware lo permite.
+- Clock presets.
+- Full scoreboard.
+- Countdown and chronograph with stable API.
+- Confirmed effects.
+- Confirmed ECO mode.
+- Music/microphone mode if firmware supports it.
 - Home Assistant / MQTT.
-- Pequeña GUI local.
-- Exportador de animaciones desde spritesheets.
+- More polished local GUI.
+- Animation exporter from spritesheets.
 
-## Fase 7 — Soporte multi-dispositivo
+## Phase 7 - Multi-Device Support
 
-- Configuración YAML/TOML de dispositivos.
-- Grupos de matrices.
-- Envío paralelo con `asyncio.gather`.
-- Scheduler para relojes, alertas y dashboards.
+- YAML/TOML device configuration.
+- Matrix groups.
+- Parallel sending with `asyncio.gather`.
+- Scheduler for clocks, alerts, and dashboards.
 
-## Definición de “comando confirmado”
+## Definition Of A Confirmed Command
 
-Un comando pasa de experimental a confirmado si tiene:
+A command moves from experimental to confirmed when it has:
 
-1. builder puro;
-2. test unitario de bytes;
-3. prueba en hardware real documentada;
-4. captura o log con bytes enviados y respuesta;
-5. entrada en `docs/PROTOCOL.md`;
-6. entrada CLI o API de alto nivel si aplica.
+1. a pure builder;
+2. an exact-byte unit test;
+3. documented real-hardware testing;
+4. a capture or log with sent bytes and response;
+5. an entry in `docs/PROTOCOL.md`;
+6. CLI or high-level API entry when applicable.

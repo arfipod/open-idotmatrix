@@ -1,8 +1,8 @@
 # Linux Bluetooth / BlueZ
 
-## Requisitos
+## Requirements
 
-Instalar Bluetooth/BlueZ según distribución.
+Install Bluetooth/BlueZ according to your distribution.
 
 Debian/Ubuntu:
 
@@ -12,42 +12,42 @@ sudo apt install -y bluetooth bluez bluez-tools rfkill
 sudo systemctl enable --now bluetooth
 ```
 
-Comprobar estado:
+Check status:
 
 ```bash
 rfkill list bluetooth
 bluetoothctl show
 ```
 
-Si está bloqueado:
+If Bluetooth is blocked:
 
 ```bash
 sudo rfkill unblock bluetooth
 ```
 
-## Permisos
+## Permissions
 
-Normalmente `bleak` habla con BlueZ por D-Bus. Si el usuario no puede acceder, probar:
+Normally `bleak` talks to BlueZ over D-Bus. If the user cannot access it, try:
 
 ```bash
 sudo usermod -aG bluetooth "$USER"
 ```
 
-Cerrar sesión y volver a entrar.
+Log out and log back in.
 
-Si sigue fallando, probar temporalmente como root para aislar si es problema de permisos:
+If it still fails, temporarily try root to isolate whether this is a permissions problem:
 
 ```bash
 sudo .venv/bin/open-idotmatrix scan
 ```
 
-## Escaneo
+## Scanning
 
 ```bash
 open-idotmatrix scan
 ```
 
-Salida esperada:
+Expected output:
 
 ```json
 [
@@ -59,7 +59,7 @@ Salida esperada:
 ]
 ```
 
-## Diagnóstico manual con bluetoothctl
+## Manual Diagnostics With bluetoothctl
 
 ```bash
 bluetoothctl
@@ -67,36 +67,36 @@ power on
 scan on
 ```
 
-Buscar dispositivos cuyo nombre empiece por `IDM-`.
+Look for devices whose name starts with `IDM-`.
 
-## Capturas con btmon
+## Captures With btmon
 
 ```bash
 sudo btmon | tee captures/session.btmon.txt
 ```
 
-Mientras `btmon` está activo, ejecutar comandos desde otra terminal.
+While `btmon` is active, run commands from another terminal.
 
-## Problemas habituales
+## Common Problems
 
-### No aparece el dispositivo
+### The Device Does Not Appear
 
-- Acercar la matriz al PC.
-- Reiniciar Bluetooth: `sudo systemctl restart bluetooth`.
-- Desconectar y reconectar alimentación de la matriz.
-- Comprobar que la app móvil no está conectada a la vez.
-- Comprobar `rfkill`.
+- Move the matrix closer to the PC.
+- Restart Bluetooth: `sudo systemctl restart bluetooth`.
+- Disconnect and reconnect matrix power.
+- Check that the mobile app is not connected at the same time.
+- Check `rfkill`.
 
-### Conecta pero no escribe
+### It Connects But Does Not Write
 
-- Probar `reset`.
-- Probar `--no-response` en GIF.
-- Probar comandos cortos primero: `on`, `off`, `fill`.
-- Añadir logging de sesión como tarea de roadmap.
+- Try `reset`.
+- Try `--no-response` for GIFs.
+- Try short commands first: `on`, `off`, `fill`.
+- Add session logging as a roadmap task.
 
-### GIF falla
+### GIF Fails
 
-Probar combinaciones:
+Try combinations:
 
 ```bash
 open-idotmatrix --address ... gif demo.gif --total-length-mode include_headers
@@ -105,4 +105,4 @@ open-idotmatrix --address ... gif demo.gif --no-ack
 open-idotmatrix --address ... gif demo.gif --no-response
 ```
 
-Registrar cuál funciona.
+Record which one works.

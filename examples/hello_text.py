@@ -14,7 +14,7 @@ async def main(address: str) -> None:
     async with OpenIDotMatrix(address=address) as matrix:
         await matrix.on()
         await matrix.set_brightness(80)
-        await matrix.text("Hola", mode=TextMode.SCROLL_LEFT_TO_RIGHT, color=(255, 255, 255))
+        await matrix.text("Hello", mode=TextMode.SCROLL_LEFT_TO_RIGHT, color=(255, 255, 255))
 
 
 if __name__ == "__main__":

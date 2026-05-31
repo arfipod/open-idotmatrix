@@ -1,15 +1,15 @@
 # Contributing
 
-Gracias por contribuir a `open-idotmatrix`.
+Thank you for contributing to `open-idotmatrix`.
 
-## Reglas de diseño
+## Design Rules
 
-- Mantener el protocolo en funciones puras dentro de `open_idotmatrix/protocol.py`.
-- Mantener BLE en `open_idotmatrix/transport.py`.
-- Mantener API de usuario en `open_idotmatrix/device.py`.
-- Todo paquete nuevo debe tener test de bytes exactos.
-- Toda hipótesis de protocolo debe documentarse en `docs/PROTOCOL.md`.
-- No copiar código de proyectos con licencias incompatibles; reimplementar desde comportamiento documentado y pruebas.
+- Keep protocol logic in pure functions inside `open_idotmatrix/protocol.py`.
+- Keep BLE code in `open_idotmatrix/transport.py`.
+- Keep the user-facing API in `open_idotmatrix/device.py`.
+- Every new packet must have an exact-byte test.
+- Every protocol hypothesis must be documented in `docs/PROTOCOL.md`.
+- Do not copy code from projects with incompatible licenses; reimplement behavior from documented observations and tests.
 
 ## Setup
 
@@ -21,13 +21,13 @@ pytest
 ruff check .
 ```
 
-## Pull requests
+## Pull Requests
 
-Una PR ideal incluye:
+An ideal PR includes:
 
-1. explicación del comando o función;
-2. bytes enviados;
-3. fuente de la hipótesis o captura;
-4. test unitario;
-5. documentación actualizada;
-6. resultado en hardware si aplica.
+1. an explanation of the command or function;
+2. sent bytes;
+3. the source of the hypothesis or capture;
+4. a unit test;
+5. updated documentation;
+6. hardware results when applicable.

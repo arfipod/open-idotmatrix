@@ -1,121 +1,122 @@
-# Guía para Codex
+# Codex Guide
 
-Este documento está escrito para que Codex pueda continuar desde este repo con hardware real y mejorar la biblioteca sin perder contexto.
+This document is written so Codex can continue from this repository with real hardware and improve the library without losing context.
 
-## Contexto
+## Context
 
-Tenemos una matriz iDotMatrix RGB 32×32. Queremos controlarla desde Linux por BLE y descifrar progresivamente el protocolo completo.
+We have a 32x32 RGB iDotMatrix display. We want to control it from Linux over BLE and progressively reverse engineer the full protocol.
 
-El repo ya incluye:
+The repository already includes:
 
-- builders puros de paquetes en `open_idotmatrix/protocol.py`;
-- transporte BLE en `open_idotmatrix/transport.py`;
-- API de alto nivel en `open_idotmatrix/device.py`;
-- CLI en `open_idotmatrix/cli.py`;
-- simulador visual en `open_idotmatrix/simulator.py`;
-- tests sin hardware en `tests/`;
-- documentación de protocolo en `docs/PROTOCOL.md`.
+- pure packet builders in `open_idotmatrix/protocol.py`;
+- BLE transport in `open_idotmatrix/transport.py`;
+- high-level API in `open_idotmatrix/device.py`;
+- CLI in `open_idotmatrix/cli.py`;
+- Qt desktop app in `open_idotmatrix/qt_window.py`;
+- visual simulator in `open_idotmatrix/simulator.py`;
+- hardware-free tests in `tests/`;
+- protocol documentation in `docs/PROTOCOL.md`.
 
-## Primera petición recomendada a Codex
+## Recommended First Request To Codex
 
 ```text
-Lee README.md, docs/PROTOCOL.md, docs/TEST_PLAN.md, docs/ROADMAP.md y docs/CODEX_BRIEF.md.
-Ejecuta pytest y corrige solo si falla.
-Después prepara una sesión de hardware smoke test para una iDotMatrix 32x32 en Linux:
-scan, on, off, brightness, fill, pixel corners, sync-time, text A, text Hola y GIF pequeño.
-No ejecutes build_delete_device_data ni comandos destructivos.
-Registra para cada prueba: comando CLI, bytes enviados, notificaciones recibidas,
-resultado visual esperado, resultado visual observado y cambios propuestos.
+Read README.md, docs/PROTOCOL.md, docs/TEST_PLAN.md, docs/ROADMAP.md, and docs/CODEX_BRIEF.md.
+Run pytest and only fix things if it fails.
+Then prepare a hardware smoke-test session for a 32x32 iDotMatrix on Linux:
+scan, on, off, brightness, fill, pixel corners, sync-time, text A, text Hello, and a small GIF.
+Do not run build_delete_device_data or destructive commands.
+For every test, record: CLI command, sent bytes, received notifications,
+expected visual result, observed visual result, and proposed changes.
 ```
 
-## Reglas para Codex
+## Rules For Codex
 
-1. No borrar documentación de protocolo; ampliarla.
-2. No mezclar transporte BLE con construcción de paquetes.
-3. No copiar código de repos GPL u otros proyectos si se mantiene licencia MIT.
-4. Si se cambia un paquete, añadir o actualizar test de bytes exactos.
-5. Si un comportamiento depende de hardware, marcarlo como `experimental` hasta validarlo.
-6. No ejecutar comandos destructivos salvo instrucción explícita.
-7. Registrar discrepancias; no ocultarlas.
+1. Do not delete protocol documentation; extend it.
+2. Do not mix BLE transport with packet construction.
+3. Do not copy GPL or otherwise incompatible code if the project remains MIT.
+4. If a packet changes, add or update an exact-byte test.
+5. If behavior depends on hardware, mark it as `experimental` until validated.
+6. Do not run destructive commands unless explicitly instructed.
+7. Record discrepancies; do not hide them.
 
-## Tareas prioritarias
+## Priority Tasks
 
-### Tarea 1 — Logging de sesión BLE
+### Task 1 - BLE Session Logging
 
-Añadir opción CLI:
+Add a CLI option:
 
 ```bash
-open-idotmatrix --address ... --session-log out/session.jsonl text "Hola"
+open-idotmatrix --address ... --session-log out/session.jsonl text "Hello"
 ```
 
-Cada línea JSONL debería contener:
+Each JSONL line should contain:
 
 ```json
 {"ts":"...", "direction":"tx", "hex":"05 00 07 01 01", "kind":"screen_on"}
 {"ts":"...", "direction":"rx", "hex":"05 00 01 00 01", "kind":"notification"}
 ```
 
-### Tarea 2 — Smoke test automatizado
+### Task 2 - Automated Smoke Test
 
-Crear comando:
+Create a command:
 
 ```bash
 open-idotmatrix --address ... smoke-test --out out/smoke.json
 ```
 
-Debe ejecutar comandos seguros y pedir confirmación visual al usuario o guardar checklist.
+It should run safe commands and ask the user for visual confirmation or save a checklist.
 
-### Tarea 3 — GIF ACK validation
+### Task 3 - GIF ACK Validation
 
-Probar dos modos:
+Test both modes:
 
 ```bash
 open-idotmatrix --address ... gif demo.gif --total-length-mode include_headers
 open-idotmatrix --address ... gif demo.gif --total-length-mode raw_payload_only
 ```
 
-Registrar cuál funciona con:
+Record which combination works with:
 
 - write with response;
 - write without response;
-- esperando ACK;
-- sin esperar ACK.
+- waiting for ACK;
+- not waiting for ACK.
 
-### Tarea 4 — MTU / write splitting
+### Task 4 - MTU / Write Splitting
 
-Inspeccionar si `max_write_without_response_size` funciona de forma estable en BlueZ. Si no, añadir opción:
+Inspect whether `max_write_without_response_size` works reliably on BlueZ. If not, add options:
 
 ```bash
 --gatt-chunk-size 20
 --gatt-chunk-size 244
 ```
 
-### Tarea 5 — Capturas BLE
+### Task 5 - BLE Captures
 
-Añadir herramienta para importar logs `btmon` o `btsnoop` si se exportan en texto. Objetivo: extraer writes a `fa02` y notificaciones de `fa03`.
+Add a tool to import `btmon` or `btsnoop` logs when they are exported as text. Goal: extract writes to `fa02` and notifications from `fa03`.
 
-### Tarea 6 — Simulador avanzado
+### Task 6 - Advanced Simulator
 
-Mejorar animaciones de texto:
+Improve text animations:
 
-- modo 1/2 horizontal real;
-- modo 3/4 vertical;
-- modo 5 strobe;
-- modo 6 fade;
-- modo 7 falling blocks;
-- modo 8 laser/filling.
+- real horizontal mode 1/2 behavior;
+- vertical mode 3/4 behavior;
+- mode 5 strobe;
+- mode 6 fade;
+- mode 7 falling blocks;
+- mode 8 laser/filling.
 
-### Tarea 7 — Documentar unknowns
+### Task 7 - Document Unknowns
 
-Añadir `docs/UNKNOWN_BYTES.md` o ampliar `PROTOCOL.md` con:
+Add to `docs/UNKNOWN_BYTES.md` or extend `PROTOCOL.md` with:
 
 - byte offset;
-- valores observados;
-- hipótesis;
-- prueba realizada;
-- resultado.
+- observed values;
+- hypothesis;
+- test performed;
+- result.
 
-## Formato recomendado para resultados de hardware
+## Recommended Hardware Result Format
 
 ```markdown
 ## Hardware test YYYY-MM-DD
@@ -127,16 +128,16 @@ Añadir `docs/UNKNOWN_BYTES.md` o ampliar `PROTOCOL.md` con:
 - bleak:
 - Device BLE name:
 - Device address:
-- Firmware/app version si se conoce:
+- Firmware/app version if known:
 
 | Test | Command | TX bytes | RX bytes | Expected | Observed | Status |
 |---|---|---|---|---|---|---|
 | on | `open-idotmatrix ... on` | `05 00 07 01 01` | ... | screen on | screen on | pass |
 ```
 
-## Zonas donde tener cuidado
+## Areas That Need Care
 
-- `delete_device_data` puede borrar datos del dispositivo.
-- Password/protection no está integrado en la API de alto nivel.
-- Fuzzing con comandos desconocidos puede dejar el firmware en estado raro; usar `reset` si se atasca.
-- GIFs grandes pueden tardar bastante o fallar por timing.
+- `delete_device_data` can delete data from the device.
+- Password/protection support is not integrated in the high-level API.
+- Fuzzing unknown commands can leave firmware in a strange state; use `reset` if it gets stuck.
+- Large GIFs can take a long time or fail because of timing.

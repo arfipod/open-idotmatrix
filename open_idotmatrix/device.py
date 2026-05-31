@@ -17,6 +17,7 @@ from .protocol import (
     build_eco_mode,
     build_effect,
     build_flip_screen,
+    build_freeze_screen,
     build_fullscreen_color,
     build_pixel,
     build_reset_packets,
@@ -82,6 +83,9 @@ class OpenIDotMatrix:
 
     async def flip(self, enabled: bool = True) -> dict:
         return await self.send(build_flip_screen(enabled))
+
+    async def freeze(self) -> dict:
+        return await self.send(build_freeze_screen())
 
     async def reset(self) -> list[dict]:
         results = []

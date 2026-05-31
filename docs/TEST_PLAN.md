@@ -1,26 +1,26 @@
-# Test plan
+# Test Plan
 
-## Tests sin hardware
+## Hardware-Free Tests
 
-Ejecutar:
+Run:
 
 ```bash
 pytest
 ```
 
-Cubre:
+Covers:
 
-- bytes exactos de comandos básicos;
-- validación de coordenadas y colores;
-- encoding de hora con dos estrategias de año;
-- packet builder de texto;
-- CRC32 de texto;
-- chunking de GIF;
-- simulator básico.
+- exact bytes for basic commands;
+- coordinate and color validation;
+- time encoding with two year strategies;
+- text packet builder;
+- text CRC32;
+- GIF chunking;
+- basic simulator behavior.
 
-## Tests con hardware
+## Hardware Tests
 
-Usar una matriz iDotMatrix 32×32 encendida y cerca del PC.
+Use a powered-on 32x32 iDotMatrix close to the PC.
 
 ### 1. Scan
 
@@ -28,13 +28,13 @@ Usar una matriz iDotMatrix 32×32 encendida y cerca del PC.
 open-idotmatrix scan
 ```
 
-Registrar:
+Record:
 
-- nombre BLE;
+- BLE name;
 - address;
 - RSSI.
 
-### 2. On/off
+### 2. On/Off
 
 ```bash
 open-idotmatrix --address AA:BB:CC:DD:EE:FF on
@@ -42,18 +42,18 @@ open-idotmatrix --address AA:BB:CC:DD:EE:FF off
 open-idotmatrix --address AA:BB:CC:DD:EE:FF on
 ```
 
-Esperado: pantalla apaga/enciende.
+Expected: screen turns off/on.
 
-### 3. Brillo
+### 3. Brightness
 
 ```bash
 open-idotmatrix --address AA:BB:CC:DD:EE:FF brightness 20
 open-idotmatrix --address AA:BB:CC:DD:EE:FF brightness 80
 ```
 
-Esperado: cambio visible de brillo.
+Expected: visible brightness change.
 
-### 4. Color sólido
+### 4. Solid Color
 
 ```bash
 open-idotmatrix --address AA:BB:CC:DD:EE:FF fill 255 0 0
@@ -62,9 +62,9 @@ open-idotmatrix --address AA:BB:CC:DD:EE:FF fill 0 0 255
 open-idotmatrix --address AA:BB:CC:DD:EE:FF fill 0 0 0
 ```
 
-Esperado: pantalla roja, verde, azul, negra.
+Expected: red, green, blue, and black screen.
 
-### 5. Orientación de píxeles
+### 5. Pixel Orientation
 
 ```bash
 open-idotmatrix --address AA:BB:CC:DD:EE:FF fill 0 0 0
@@ -74,18 +74,18 @@ open-idotmatrix --address AA:BB:CC:DD:EE:FF pixel 0 31 0 0 255
 open-idotmatrix --address AA:BB:CC:DD:EE:FF pixel 31 31 255 255 255
 ```
 
-Registrar orientación real:
+Record real orientation:
 
-| Coordenada | Color | Posición observada |
+| Coordinate | Color | Observed position |
 |---|---|---|
-| 0,0 | rojo | |
-| 31,0 | verde | |
-| 0,31 | azul | |
-| 31,31 | blanco | |
+| 0,0 | red | |
+| 31,0 | green | |
+| 0,31 | blue | |
+| 31,31 | white | |
 
-### 6. Hora
+### 6. Time
 
-Probar ambos modos:
+Test both modes:
 
 ```bash
 open-idotmatrix --address AA:BB:CC:DD:EE:FF sync-time --year-mode low_byte
@@ -94,31 +94,31 @@ open-idotmatrix --address AA:BB:CC:DD:EE:FF sync-time --year-mode two_digit
 open-idotmatrix --address AA:BB:CC:DD:EE:FF clock 0
 ```
 
-Registrar cuál muestra fecha/hora correcta si el modo reloj muestra fecha.
+Record which one displays the correct date/time if the clock mode shows a date.
 
-### 7. Texto
+### 7. Text
 
 ```bash
 open-idotmatrix --address AA:BB:CC:DD:EE:FF text "A" --mode 0 --rgb 255 255 255
-open-idotmatrix --address AA:BB:CC:DD:EE:FF text "Hola" --mode 1 --speed 95 --rgb 255 0 0
+open-idotmatrix --address AA:BB:CC:DD:EE:FF text "Hello" --mode 1 --speed 95 --rgb 255 0 0
 ```
 
-Registrar:
+Record:
 
-- orientación;
-- dirección de scroll;
-- velocidad;
-- color real.
+- orientation;
+- scroll direction;
+- speed;
+- real color.
 
 ### 8. GIF
 
-Usar un GIF pequeño. Si no se tiene, crear uno con Pillow o usar una imagen y dejar que el CLI procese.
+Use a small GIF. If you do not have one, create it with Pillow or use an image and let the CLI process it.
 
 ```bash
 open-idotmatrix --address AA:BB:CC:DD:EE:FF gif demo.gif
 ```
 
-Si falla:
+If it fails:
 
 ```bash
 open-idotmatrix --address AA:BB:CC:DD:EE:FF gif demo.gif --no-ack
@@ -126,9 +126,9 @@ open-idotmatrix --address AA:BB:CC:DD:EE:FF gif demo.gif --total-length-mode raw
 open-idotmatrix --address AA:BB:CC:DD:EE:FF gif demo.gif --no-response
 ```
 
-Registrar notificaciones si hay logging.
+Record notifications if logging is available.
 
-## Plantilla de reporte
+## Report Template
 
 ```markdown
 # Hardware test

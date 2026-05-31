@@ -4,8 +4,17 @@ import pytest
 
 from open_idotmatrix.exceptions import ProtocolError
 from open_idotmatrix.protocol import (
+    build_chronograph,
+    build_clock_mode,
+    build_countdown,
+    build_delete_device_data,
+    build_eco_mode,
+    build_effect,
+    build_flip_screen,
+    build_freeze_screen,
     build_fullscreen_color,
     build_pixel,
+    build_scoreboard,
     build_screen_off,
     build_screen_on,
     build_set_brightness,
@@ -39,8 +48,17 @@ def test_parse_known_packets():
         "kind": "brightness",
         "length": 5,
     }
+    assert parse_packet(build_freeze_screen())["kind"] == "freeze_screen"
+    assert parse_packet(build_flip_screen(True))["kind"] == "flip_screen"
     assert parse_packet(build_fullscreen_color((1, 2, 3)))["color"] == (1, 2, 3)
     assert parse_packet(build_pixel(1, 2, (3, 4, 5)))["kind"] == "pixel"
+    assert parse_packet(build_clock_mode(1))["kind"] == "clock"
+    assert parse_packet(build_chronograph(2))["kind"] == "chronograph"
+    assert parse_packet(build_countdown(1, 2, 3))["kind"] == "countdown"
+    assert parse_packet(build_scoreboard(12, 34))["score_right"] == 34
+    assert parse_packet(build_eco_mode(1, 22, 0, 7, 30, 20))["kind"] == "eco"
+    assert parse_packet(build_effect(1, [(255, 0, 0), (0, 255, 0)]))["color_count"] == 2
+    assert parse_packet(build_delete_device_data())["kind"] == "delete_device_data"
 
 
 def test_validation():

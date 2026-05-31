@@ -1,46 +1,48 @@
-# Arquitectura
+# Architecture
 
-## Capas
+## Layers
 
 ```text
-CLI / ejemplos
-    ↓
-OpenIDotMatrix       # API async de alto nivel
-    ↓
-protocol.py          # bytes puros
-transport.py         # BLE con bleak
-    ↓
+CLI / examples
+    |
+OpenIDotMatrix       # high-level async API
+    |
+protocol.py          # pure bytes
+transport.py         # BLE with bleak
+    |
 iDotMatrix 32x32
 ```
 
-El simulador usa `protocol.py` y `text.py`, pero no usa BLE.
+The simulator uses `protocol.py` and `text.py`, but it does not use BLE.
 
-## Por qué separar protocolo y transporte
+## Why Protocol And Transport Are Separate
 
-Permite:
+This makes it possible to:
 
-- testear sin hardware;
-- comparar bytes contra capturas;
-- reutilizar el protocolo con otro backend BLE;
-- añadir simulación y tooling sin conectar a la matriz.
+- test without hardware;
+- compare bytes against captures;
+- reuse the protocol with another BLE backend;
+- add simulation and tooling without connecting to the matrix.
 
-## Módulos
+## Modules
 
-| Módulo | Responsabilidad |
+| Module | Responsibility |
 |---|---|
-| `constants.py` | UUIDs, tamaños, ACKs |
-| `types.py` | enums y validación básica |
-| `protocol.py` | construir/parsear paquetes |
-| `text.py` | PIL → bitmaps 16×32 |
-| `gif.py` | GIF/image → GIF 32×32 → chunks |
+| `constants.py` | UUIDs, sizes, ACKs |
+| `types.py` | enums and basic validation |
+| `protocol.py` | packet building/parsing |
+| `text.py` | PIL -> 16x32 bitmaps |
+| `gif.py` | GIF/image -> 32x32 GIF -> chunks |
 | `transport.py` | BLE scan/connect/write/notify |
-| `device.py` | API cómoda async |
-| `simulator.py` | vista local 32×32 |
-| `cli.py` | comandos de usuario |
+| `device.py` | convenient async API |
+| `simulator.py` | local 32x32 view |
+| `cli.py` | user commands |
+| `qt_app.py` | optional Qt app launcher |
+| `qt_window.py` | optional Qt desktop UI |
 
-## Estabilidad
+## Stability
 
-- `protocol.py`: debe ser la parte más testeada y estable.
-- `transport.py`: puede necesitar ajustes por BlueZ/MTU.
-- `gif.py`: probablemente necesitará validación por firmware.
-- `simulator.py`: aproximado, no pretende ser firmware exacto.
+- `protocol.py`: should be the most tested and stable part.
+- `transport.py`: may need BlueZ/MTU adjustments.
+- `gif.py`: will likely need firmware-specific validation.
+- `simulator.py`: approximate; it is not intended to exactly replicate firmware behavior.

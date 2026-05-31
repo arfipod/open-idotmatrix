@@ -1,30 +1,32 @@
 # open-idotmatrix
 
-Toolkit abierto para controlar y estudiar pantallas iDotMatrix **32×32 RGB** desde Linux usando Python.
+Open toolkit for controlling and studying **32x32 RGB iDotMatrix** displays from Linux with Python.
 
-Este repo está preparado como punto de partida limpio para:
+This repository is intended as a clean starting point for:
 
-- controlar la matriz por Bluetooth Low Energy desde Linux;
-- construir paquetes del protocolo sin depender de hardware;
-- enviar comandos básicos, texto y GIFs;
-- simular en pantalla de PC lo que se verá en la matriz;
-- dejar una base clara para que Codex continúe probando hardware real y ayude a descifrar el protocolo completo.
+- controlling the matrix over Bluetooth Low Energy from Linux;
+- building protocol packets without hardware;
+- sending basic commands, text, and GIFs;
+- simulating on a PC what should appear on the matrix;
+- giving Codex a clear base for real-hardware testing and incremental protocol reverse engineering.
 
-> Estado: **alpha / reverse engineering**. El objetivo inicial es la matriz iDotMatrix 32×32 cuyo nombre BLE suele empezar por `IDM-`.
+> Status: **alpha / reverse engineering**. The initial target is the 32x32 iDotMatrix display whose BLE name usually starts with `IDM-`.
 
-## Qué incluye
+## Contents
 
 ```text
 open-idotmatrix/
   open_idotmatrix/
-    constants.py      # UUIDs, geometría y constantes de protocolo
-    protocol.py       # builders/parsers puros de paquetes BLE
-    text.py           # render de texto 16x32 con Pillow
-    gif.py            # procesado y chunking de GIFs 32x32
-    transport.py      # transporte BLE con bleak
-    device.py         # API async de alto nivel
-    simulator.py      # simulador 32x32 con Pillow
-    cli.py            # CLI open-idotmatrix
+    constants.py      # UUIDs, geometry, and protocol constants
+    protocol.py       # pure BLE packet builders/parsers
+    text.py           # 16x32 text rendering with Pillow
+    gif.py            # 32x32 GIF processing and chunking
+    transport.py      # BLE transport with bleak
+    device.py         # high-level async API
+    simulator.py      # 32x32 simulator with Pillow
+    cli.py            # open-idotmatrix CLI
+    qt_app.py         # optional PySide6 app launcher
+    qt_window.py      # optional PySide6 desktop UI
   docs/
     PROTOCOL.md
     ROADMAP.md
@@ -38,13 +40,13 @@ open-idotmatrix/
   .github/workflows/ci.yml
 ```
 
-## Instalación local
+## Local Installation
 
-Requisitos de sistema:
+System requirements:
 
-- Python 3.10 o superior.
-- Linux con Bluetooth activo para usar hardware real.
-- BlueZ instalado si vas a usar BLE.
+- Python 3.10 or newer.
+- Linux with Bluetooth enabled for real hardware access.
+- BlueZ installed if you plan to use BLE.
 
 ```bash
 python3 -m venv .venv
@@ -53,60 +55,67 @@ pip install -e .[dev]
 pytest
 ```
 
-El proyecto declara todas sus dependencias Python en `pyproject.toml`: `bleak`, `pillow`, `pytest`, `pytest-asyncio` y `ruff` para desarrollo.
+Dependencies are declared in `pyproject.toml`: `bleak` and `pillow` for the base package; `pytest`, `pytest-asyncio`, and `ruff` for development; `PySide6` as the optional Qt extra.
 
-## Primer uso sin hardware: simulador
-
-Renderizar texto a una imagen local:
+To install the Qt desktop app too:
 
 ```bash
-open-idotmatrix simulate --text "Hola" --save out/hola.png
+pip install -e ".[dev,qt]"
+open-idotmatrix-qt
 ```
 
-Renderizar una animación GIF de texto desplazándose:
+## First Use Without Hardware: Simulator
+
+Render text to a local image:
+
+```bash
+open-idotmatrix simulate --text "Hello" --save out/hello.png
+```
+
+Render a scrolling text GIF:
 
 ```bash
 open-idotmatrix simulate --text-animation "open-idotmatrix" --save out/text.gif
 ```
 
-Simular paquetes raw:
+Simulate raw packets:
 
 ```bash
 open-idotmatrix simulate --packet-hex "07 00 02 02 ff 00 00" --save out/red.png
 open-idotmatrix simulate --packet-hex "0a 00 05 01 00 00 ff 00 1f 1f" --save out/pixel.png
 ```
 
-## Primer uso con hardware real
+## First Use With Real Hardware
 
-Escanear dispositivos:
+Scan for devices:
 
 ```bash
 open-idotmatrix scan
 ```
 
-Encender/apagar:
+Turn the screen on/off:
 
 ```bash
 open-idotmatrix --address AA:BB:CC:DD:EE:FF on
 open-idotmatrix --address AA:BB:CC:DD:EE:FF off
 ```
 
-Color sólido:
+Solid color:
 
 ```bash
 open-idotmatrix --address AA:BB:CC:DD:EE:FF fill 255 0 0
 ```
 
-Píxel individual:
+Single pixel:
 
 ```bash
 open-idotmatrix --address AA:BB:CC:DD:EE:FF pixel 31 31 0 0 255
 ```
 
-Texto:
+Text:
 
 ```bash
-open-idotmatrix --address AA:BB:CC:DD:EE:FF text "Hola" --rgb 255 255 255 --mode 1 --speed 95
+open-idotmatrix --address AA:BB:CC:DD:EE:FF text "Hello" --rgb 255 255 255 --mode 1 --speed 95
 ```
 
 GIF:
@@ -115,13 +124,30 @@ GIF:
 open-idotmatrix --address AA:BB:CC:DD:EE:FF gif ./demo.gif
 ```
 
-Si el ACK por notificaciones falla durante el primer test de GIF:
+If notification ACK handling fails during early GIF testing:
 
 ```bash
 open-idotmatrix --address AA:BB:CC:DD:EE:FF gif ./demo.gif --no-ack
 ```
 
-## API Python
+## Qt Application
+
+The PySide6 app exposes the same operation families as the CLI:
+
+- BLE scanning and address selection;
+- on/off, reset, freeze, brightness, flip, and sync-time;
+- fill, pixel, and spiral;
+- text with animation, color, background, and font controls;
+- GIF upload with raw, ACK, response, timeout, and total-length options;
+- clock, chronograph, countdown, scoreboard, ECO, and effects;
+- raw hex, decode, simulator, text animation, and gif-preview tools;
+- delete-device-data with explicit confirmation.
+
+```bash
+open-idotmatrix-qt
+```
+
+## Python API
 
 ```python
 import asyncio
@@ -135,15 +161,15 @@ async def main():
         await m.fill((0, 0, 0))
         await m.pixel(0, 0, (255, 0, 0))
         await m.pixel(31, 31, (0, 0, 255))
-        await m.text("Hola", mode=TextMode.SCROLL_LEFT_TO_RIGHT, color=(255, 255, 255))
+        await m.text("Hello", mode=TextMode.SCROLL_LEFT_TO_RIGHT, color=(255, 255, 255))
         await m.gif("demo.gif")
 
 asyncio.run(main())
 ```
 
-## Protocolo conocido resumido
+## Known Protocol Summary
 
-UUIDs principales:
+Main UUIDs:
 
 ```text
 Service: 000000fa-0000-1000-8000-00805f9b34fb
@@ -151,27 +177,27 @@ Write:   0000fa02-0000-1000-8000-00805f9b34fb
 Notify:  0000fa03-0000-1000-8000-00805f9b34fb
 ```
 
-Comandos básicos:
+Basic commands:
 
-| Acción | Bytes |
+| Action | Bytes |
 |---|---|
-| Encender | `05 00 07 01 01` |
-| Apagar | `05 00 07 01 00` |
-| Brillo | `05 00 04 80 <percent>` |
-| Color pantalla completa | `07 00 02 02 <r> <g> <b>` |
+| Screen on | `05 00 07 01 01` |
+| Screen off | `05 00 07 01 00` |
+| Brightness | `05 00 04 80 <percent>` |
+| Full-screen color | `07 00 02 02 <r> <g> <b>` |
 | Pixel | `0a 00 05 01 00 <r> <g> <b> <x> <y>` |
-| Hora | `0b 00 01 80 <yy> <mm> <dd> <dow> <hh> <min> <sec>` |
+| Time | `0b 00 01 80 <yy> <mm> <dd> <dow> <hh> <min> <sec>` |
 
-Más detalles en [`docs/PROTOCOL.md`](docs/PROTOCOL.md).
+More details are in [`docs/PROTOCOL.md`](docs/PROTOCOL.md).
 
-## Decodificar paquetes
+## Decode Packets
 
 ```bash
 open-idotmatrix decode "05 00 07 01 01"
 open-idotmatrix decode "0a 00 05 01 00 ff 00 00 1f 1f"
 ```
 
-Esto imprime JSON con el tipo de paquete reconocido, longitudes y campos.
+This prints JSON with the recognized packet type, lengths, and fields.
 
 ## Tests
 
@@ -179,42 +205,42 @@ Esto imprime JSON con el tipo de paquete reconocido, longitudes y campos.
 pytest
 ```
 
-Los tests actuales cubren:
+Current tests cover:
 
-- bytes exactos de comandos básicos;
-- validación de rangos;
-- paquetización de texto y CRC32;
-- chunking de GIF;
-- simulación de pixel, color sólido y texto.
+- exact bytes for basic commands;
+- range validation;
+- text packetization and CRC32;
+- GIF chunking;
+- pixel, solid-color, and text simulation.
 
-Ver [`docs/TEST_PLAN.md`](docs/TEST_PLAN.md).
+See [`docs/TEST_PLAN.md`](docs/TEST_PLAN.md).
 
-## Cómo debe continuar Codex
+## How Codex Should Continue
 
-Este repo ya incluye una guía específica para continuar con hardware real: [`docs/CODEX_BRIEF.md`](docs/CODEX_BRIEF.md).
+This repository includes a specific guide for continuing with real hardware: [`docs/CODEX_BRIEF.md`](docs/CODEX_BRIEF.md).
 
-Resumen de la primera petición a Codex:
+Suggested first request for Codex:
 
 ```text
-Lee README.md, docs/PROTOCOL.md, docs/TEST_PLAN.md y docs/CODEX_BRIEF.md.
-Ejecuta pytest. Después, con mi matriz iDotMatrix 32x32 conectada por Bluetooth,
-prueba scan, on/off, fill, pixel, text y gif. Registra los bytes enviados,
-notificaciones recibidas y cualquier discrepancia. No ejecutes comandos
-destructivos salvo que lo pida explícitamente.
+Read README.md, docs/PROTOCOL.md, docs/TEST_PLAN.md, and docs/CODEX_BRIEF.md.
+Run pytest. Then, with my 32x32 iDotMatrix connected over Bluetooth, test
+scan, on/off, fill, pixel, text, and gif. Record sent bytes, received
+notifications, and any discrepancy. Do not run destructive commands unless I
+explicitly ask for them.
 ```
 
-## Principios del proyecto
+## Project Principles
 
-1. **Código limpio desde cero.** No se copia código de otros repos; se reimplementan paquetes a partir de conocimiento público y pruebas.
-2. **Builders puros.** El protocolo está separado del transporte BLE.
-3. **Hardware opcional para tests.** Los tests unitarios funcionan sin matriz.
-4. **32×32 primero.** No se intenta soportar 16×16 o 64×64 hasta estabilizar el caso real.
-5. **Reverse engineering reproducible.** Cada comando nuevo debe documentarse con bytes, hipótesis, tests y captura si existe.
+1. **Clean code from scratch.** Do not copy code from other repositories; reimplement packets from public knowledge and tests.
+2. **Pure builders.** Protocol logic is separated from BLE transport.
+3. **Hardware-optional tests.** Unit tests work without a matrix.
+4. **32x32 first.** Do not attempt 16x16 or 64x64 support until the real 32x32 path is stable.
+5. **Reproducible reverse engineering.** Every new command should be documented with bytes, hypotheses, tests, and captures when available.
 
-## Licencia
+## License
 
-MIT. Ver [`LICENSE`](LICENSE).
+MIT. See [`LICENSE`](LICENSE).
 
-## Créditos técnicos
+## Technical Credits
 
-Este proyecto parte del análisis público existente sobre iDotMatrix, especialmente las notas de 8none1 y el trabajo de la comunidad alrededor de clientes Python para iDotMatrix. La implementación de este repo es nueva y está organizada para pruebas, simulación y reverse engineering incremental.
+This project builds on public iDotMatrix analysis, especially 8none1's notes and community work around Python iDotMatrix clients. The implementation in this repository is new and organized for testing, simulation, and incremental reverse engineering.
