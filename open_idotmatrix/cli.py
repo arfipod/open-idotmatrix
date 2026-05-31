@@ -12,7 +12,12 @@ from typing import Any
 from .device import OpenIDotMatrix
 from .exceptions import OpenIDotMatrixError, ProtocolError
 from .protocol import parse_packet
-from .simulator import MatrixSimulator, save_gif_preview_frames, save_text_animation, simulate_text_frame
+from .simulator import (
+    MatrixSimulator,
+    save_gif_preview_frames,
+    save_text_animation,
+    simulate_text_frame,
+)
 from .types import GifTotalLengthMode, TextMode, YearByteMode
 
 

@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
-from typing import Callable, Iterable, Sequence
 
 from .constants import DEVICE_NAME_PREFIX, NOTIFY_UUID, WRITE_UUID
 from .exceptions import AckTimeoutError, DeviceNotFoundError, TransportError
@@ -96,7 +96,7 @@ class BleTransport:
                 await self.stop_notifications()
             await self.client.disconnect()
 
-    async def __aenter__(self) -> "BleTransport":
+    async def __aenter__(self) -> BleTransport:
         await self.connect()
         return self
 
@@ -181,7 +181,10 @@ class BleTransport:
             remaining = deadline - asyncio.get_running_loop().time()
             if remaining <= 0:
                 raise AckTimeoutError("timed out waiting for BLE notification")
-            payload = await asyncio.wait_for(self._notification_queue.get(), timeout=remaining)
+            try:
+                payload = await asyncio.wait_for(self._notification_queue.get(), timeout=remaining)
+            except TimeoutError as exc:
+                raise AckTimeoutError("timed out waiting for BLE notification") from exc
             if expected_values is None or payload in expected_values:
                 return payload
 

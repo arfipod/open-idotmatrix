@@ -9,16 +9,16 @@ from __future__ import annotations
 import math
 import struct
 import zlib
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Iterable, Sequence
+from typing import Any
 
 from .constants import (
     ACK_CHUNK_OK,
     ACK_UPLOAD_DONE,
     GIF_CHUNK_HEADER_SIZE,
     GIF_PAYLOAD_CHUNK_SIZE,
-    HEIGHT,
     TEXT_GLYPH_BYTES,
     TEXT_SEPARATOR_32,
     WIDTH,
@@ -409,12 +409,12 @@ def parse_packet(packet: bytes | bytearray) -> dict[str, Any]:
     if packet == build_screen_off():
         result.update(kind="screen_off")
         return result
-    if packet in build_reset_packets():
-        result.update(kind="reset_or_recover")
-        return result
 
     if len(packet) == 5 and packet[0:4] == bytes((0x05, 0x00, 0x04, 0x80)):
         result.update(kind="brightness", brightness=packet[4])
+        return result
+    if packet in build_reset_packets():
+        result.update(kind="reset_or_recover")
         return result
     if len(packet) == 5 and packet[0:4] == bytes((0x05, 0x00, 0x06, 0x80)):
         result.update(kind="flip_screen", enabled=bool(packet[4]))

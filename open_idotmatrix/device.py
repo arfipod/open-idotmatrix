@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Iterable, Sequence
 from datetime import datetime
 from pathlib import Path
-from typing import Iterable, Sequence
 
-from .constants import WIDTH
+from .constants import ACK_CHUNK_OK, ACK_UPLOAD_DONE, WIDTH
 from .gif import gif_chunks_from_file
 from .protocol import (
     build_chronograph,
@@ -59,7 +59,7 @@ class OpenIDotMatrix:
     async def disconnect(self) -> None:
         await self.transport.disconnect()
 
-    async def __aenter__(self) -> "OpenIDotMatrix":
+    async def __aenter__(self) -> OpenIDotMatrix:
         await self.connect()
         return self
 

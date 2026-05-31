@@ -2,7 +2,13 @@
 
 from .constants import DEVICE_NAME_PREFIX, HEIGHT, NOTIFY_UUID, SERVICE_UUID, WIDTH, WRITE_UUID
 from .device import OpenIDotMatrix
-from .exceptions import AckTimeoutError, DeviceNotFoundError, OpenIDotMatrixError, ProtocolError, TransportError
+from .exceptions import (
+    AckTimeoutError,
+    DeviceNotFoundError,
+    OpenIDotMatrixError,
+    ProtocolError,
+    TransportError,
+)
 from .protocol import (
     build_fullscreen_color,
     build_gif_chunks,
@@ -15,7 +21,16 @@ from .protocol import (
     parse_packet,
 )
 from .simulator import MatrixSimulator
-from .types import Color, GifTotalLengthMode, Pixel, Point, TextBackgroundMode, TextColorMode, TextMode, YearByteMode
+from .types import (
+    Color,
+    GifTotalLengthMode,
+    Pixel,
+    Point,
+    TextBackgroundMode,
+    TextColorMode,
+    TextMode,
+    YearByteMode,
+)
 
 __version__ = "0.1.0"
 

@@ -2,6 +2,7 @@ from datetime import datetime
 
 import pytest
 
+from open_idotmatrix.exceptions import ProtocolError
 from open_idotmatrix.protocol import (
     build_fullscreen_color,
     build_pixel,
@@ -12,7 +13,6 @@ from open_idotmatrix.protocol import (
     parse_packet,
 )
 from open_idotmatrix.types import YearByteMode
-from open_idotmatrix.exceptions import ProtocolError
 
 
 def test_basic_packets_are_exact():
@@ -33,6 +33,12 @@ def test_set_time_year_modes():
 
 def test_parse_known_packets():
     assert parse_packet(build_screen_on())["kind"] == "screen_on"
+    assert parse_packet(build_set_brightness(80)) == {
+        "brightness": 80,
+        "hex": "05 00 04 80 50",
+        "kind": "brightness",
+        "length": 5,
+    }
     assert parse_packet(build_fullscreen_color((1, 2, 3)))["color"] == (1, 2, 3)
     assert parse_packet(build_pixel(1, 2, (3, 4, 5)))["kind"] == "pixel"
 

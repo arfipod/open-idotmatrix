@@ -7,9 +7,9 @@ should show.
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Iterable, Sequence
 
 from PIL import Image, ImageDraw
 

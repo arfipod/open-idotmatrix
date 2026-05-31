@@ -1,7 +1,7 @@
 import zlib
 
-from open_idotmatrix.protocol import build_gif_chunks, expected_gif_ack_for_chunk, parse_packet
 from open_idotmatrix.constants import ACK_CHUNK_OK, ACK_UPLOAD_DONE, GIF_CHUNK_HEADER_SIZE
+from open_idotmatrix.protocol import build_gif_chunks, expected_gif_ack_for_chunk, parse_packet
 from open_idotmatrix.types import GifTotalLengthMode
 
 
