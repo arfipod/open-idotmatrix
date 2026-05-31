@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-import asyncio
 import json
 import sys
-from collections.abc import Awaitable, Callable
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from PySide6.QtCore import QObject, Qt, QThread, Signal, Slot
+from PySide6.QtCore import QProcess, Qt
 from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import (
     QApplication,
@@ -32,8 +31,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from .device import OpenIDotMatrix
 from .exceptions import OpenIDotMatrixError, ProtocolError
+from .gif import save_matrix_image_preview
 from .protocol import parse_packet
 from .simulator import (
     MatrixSimulator,
@@ -48,8 +47,6 @@ from .types import (
     TextMode,
     YearByteMode,
 )
-
-AsyncJob = Callable[[], Awaitable[Any]]
 
 
 def _compact_result(value: Any) -> Any:
@@ -66,33 +63,12 @@ def _json(value: Any) -> str:
     return json.dumps(_compact_result(value), indent=2, sort_keys=True, default=str)
 
 
-class AsyncWorker(QObject):
-    finished = Signal(object)
-    failed = Signal(str)
-    done = Signal()
-
-    def __init__(self, job: AsyncJob) -> None:
-        super().__init__()
-        self._job = job
-
-    @Slot()
-    def run(self) -> None:
-        try:
-            result = asyncio.run(self._job())
-        except Exception as exc:  # pragma: no cover - exercised by GUI usage
-            self.failed.emit(f"{type(exc).__name__}: {exc}")
-        else:
-            self.finished.emit(result)
-        finally:
-            self.done.emit()
-
-
 class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle("open-idotmatrix")
         self.resize(1120, 820)
-        self._threads: list[QThread] = []
+        self._processes: list[QProcess] = []
         self.preview_label = QLabel()
         self.preview_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.preview_label.setMinimumSize(260, 260)
@@ -127,9 +103,14 @@ class MainWindow(QMainWindow):
         self.device_combo = QComboBox()
         self.device_combo.currentIndexChanged.connect(self._select_scanned_device)
         self.scan_timeout = self._float_spin(0.5, 30.0, 5.0, 0.5)
+        self.idm_only = QCheckBox("IDM only")
+        self.idm_only.setChecked(True)
+        self.status_label = QLabel("Idle")
 
         scan = QPushButton("Scan")
         scan.clicked.connect(self.scan_devices)
+        connect = QPushButton("Test Connect")
+        connect.clicked.connect(self.test_connection)
         clear = QPushButton("Clear Log")
         clear.clicked.connect(self.log.clear)
 
@@ -139,8 +120,12 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.device_combo, 0, 3)
         layout.addWidget(QLabel("Timeout"), 0, 4)
         layout.addWidget(self.scan_timeout, 0, 5)
-        layout.addWidget(scan, 0, 6)
-        layout.addWidget(clear, 0, 7)
+        layout.addWidget(self.idm_only, 0, 6)
+        layout.addWidget(scan, 0, 7)
+        layout.addWidget(connect, 0, 8)
+        layout.addWidget(clear, 0, 9)
+        layout.addWidget(QLabel("Status"), 1, 0)
+        layout.addWidget(self.status_label, 1, 1, 1, 9)
         layout.setColumnStretch(1, 2)
         layout.setColumnStretch(3, 2)
         return panel
@@ -150,37 +135,31 @@ class MainWindow(QMainWindow):
         layout = QGridLayout(tab)
 
         on = QPushButton("On")
-        on.clicked.connect(lambda: self._run_device("on", lambda matrix: matrix.on()))
+        on.clicked.connect(lambda: self._run_device("on", ["on"]))
         off = QPushButton("Off")
-        off.clicked.connect(lambda: self._run_device("off", lambda matrix: matrix.off()))
+        off.clicked.connect(lambda: self._run_device("off", ["off"]))
         freeze = QPushButton("Freeze")
-        freeze.clicked.connect(lambda: self._run_device("freeze", lambda matrix: matrix.freeze()))
+        freeze.clicked.connect(lambda: self._run_device("freeze", ["freeze"]))
         reset = QPushButton("Reset")
-        reset.clicked.connect(lambda: self._run_device("reset", lambda matrix: matrix.reset()))
+        reset.clicked.connect(lambda: self._run_device("reset", ["reset"]))
 
         self.brightness = self._spin(5, 100, 80)
         brightness = QPushButton("Set Brightness")
         brightness.clicked.connect(
-            lambda: self._run_device(
-                "brightness",
-                lambda matrix: matrix.set_brightness(self.brightness.value()),
-            )
+            lambda: self._run_device("brightness", ["brightness", str(self.brightness.value())])
         )
 
         flip_on = QPushButton("Flip On")
-        flip_on.clicked.connect(lambda: self._run_device("flip on", lambda matrix: matrix.flip(True)))
+        flip_on.clicked.connect(lambda: self._run_device("flip on", ["flip"]))
         flip_off = QPushButton("Flip Off")
-        flip_off.clicked.connect(lambda: self._run_device("flip off", lambda matrix: matrix.flip(False)))
+        flip_off.clicked.connect(lambda: self._run_device("flip off", ["flip", "--disable"]))
 
         self.year_mode = QComboBox()
         for mode in YearByteMode:
             self.year_mode.addItem(mode.value, mode)
         sync = QPushButton("Sync Time")
         sync.clicked.connect(
-            lambda: self._run_device(
-                "sync time",
-                lambda matrix: matrix.sync_time(year_mode=self.year_mode.currentData()),
-            )
+            lambda: self._run_device("sync time", ["sync-time", "--year-mode", self.year_mode.currentData().value])
         )
 
         layout.addWidget(on, 0, 0)
@@ -205,7 +184,7 @@ class MainWindow(QMainWindow):
         fill_rgb, self.fill_rgb = self._rgb_editor((255, 0, 0))
         fill = QPushButton("Fill")
         fill.clicked.connect(
-            lambda: self._run_device("fill", lambda matrix: matrix.fill(self._rgb(self.fill_rgb)))
+            lambda: self._run_device("fill", ["fill", *self._rgb_args(self.fill_rgb)])
         )
 
         self.pixel_x = self._spin(0, 31, 0)
@@ -215,11 +194,7 @@ class MainWindow(QMainWindow):
         pixel.clicked.connect(
             lambda: self._run_device(
                 "pixel",
-                lambda matrix: matrix.pixel(
-                    self.pixel_x.value(),
-                    self.pixel_y.value(),
-                    self._rgb(self.pixel_rgb),
-                ),
+                ["pixel", str(self.pixel_x.value()), str(self.pixel_y.value()), *self._rgb_args(self.pixel_rgb)],
             )
         )
 
@@ -229,10 +204,7 @@ class MainWindow(QMainWindow):
         spiral.clicked.connect(
             lambda: self._run_device(
                 "spiral",
-                lambda matrix: matrix.spiral(
-                    self._rgb(self.spiral_rgb),
-                    delay=self.spiral_delay.value(),
-                ),
+                ["spiral", *self._rgb_args(self.spiral_rgb), "--delay", str(self.spiral_delay.value())],
             )
         )
 
@@ -320,6 +292,21 @@ class MainWindow(QMainWindow):
         make_preview = QPushButton("Export Preview Frames")
         make_preview.clicked.connect(self.export_gif_preview)
 
+        self.image_path = QLineEdit()
+        image_browse = QPushButton("Browse")
+        image_browse.clicked.connect(lambda: self._browse_open(self.image_path, "Select Image"))
+        self.image_preview_path = QLineEdit("out/image_32x32.png")
+        image_preview_browse = QPushButton("Browse")
+        image_preview_browse.clicked.connect(lambda: self._browse_save(self.image_preview_path, "Save 32x32 Preview"))
+        self.image_no_ack = QCheckBox("No ACK")
+        self.image_no_ack.setChecked(True)
+        self.image_no_response = QCheckBox("No Response")
+        self.image_no_response.setChecked(True)
+        preview_image = QPushButton("Preview 32x32")
+        preview_image.clicked.connect(self.preview_image_32x32)
+        send_image = QPushButton("Send Image")
+        send_image.clicked.connect(self.send_image)
+
         gif_layout.addWidget(QLabel("Path"), 0, 0)
         gif_layout.addWidget(self.gif_path, 0, 1, 1, 2)
         gif_layout.addWidget(gif_browse, 0, 3)
@@ -339,6 +326,16 @@ class MainWindow(QMainWindow):
         gif_layout.addWidget(QLabel("Frames"), 6, 0)
         gif_layout.addWidget(self.gif_preview_max, 6, 1)
         gif_layout.addWidget(make_preview, 6, 2)
+        gif_layout.addWidget(QLabel("Image Path"), 8, 0)
+        gif_layout.addWidget(self.image_path, 8, 1, 1, 2)
+        gif_layout.addWidget(image_browse, 8, 3)
+        gif_layout.addWidget(QLabel("32x32 Preview"), 9, 0)
+        gif_layout.addWidget(self.image_preview_path, 9, 1, 1, 2)
+        gif_layout.addWidget(image_preview_browse, 9, 3)
+        gif_layout.addWidget(self.image_no_ack, 10, 0)
+        gif_layout.addWidget(self.image_no_response, 10, 1)
+        gif_layout.addWidget(preview_image, 10, 2)
+        gif_layout.addWidget(send_image, 10, 3)
         return tab
 
     def _modes_tab(self) -> QWidget:
@@ -355,19 +352,14 @@ class MainWindow(QMainWindow):
         clock.clicked.connect(
             lambda: self._run_device(
                 "clock",
-                lambda matrix: matrix.clock(
-                    self.clock_style.value(),
-                    visible_date=self.clock_date.isChecked(),
-                    hour24=self.clock_24h.isChecked(),
-                    color=self._rgb(self.clock_rgb),
-                ),
+                self._clock_args(),
             )
         )
 
         self.chrono_mode = self._spin(0, 3, 0)
         chrono = QPushButton("Chronograph")
         chrono.clicked.connect(
-            lambda: self._run_device("chronograph", lambda matrix: matrix.chronograph(self.chrono_mode.value()))
+            lambda: self._run_device("chronograph", ["chronograph", str(self.chrono_mode.value())])
         )
 
         self.countdown_mode = self._spin(0, 3, 0)
@@ -377,11 +369,12 @@ class MainWindow(QMainWindow):
         countdown.clicked.connect(
             lambda: self._run_device(
                 "countdown",
-                lambda matrix: matrix.countdown(
-                    self.countdown_mode.value(),
-                    self.countdown_minutes.value(),
-                    self.countdown_seconds.value(),
-                ),
+                [
+                    "countdown",
+                    str(self.countdown_mode.value()),
+                    str(self.countdown_minutes.value()),
+                    str(self.countdown_seconds.value()),
+                ],
             )
         )
 
@@ -391,7 +384,7 @@ class MainWindow(QMainWindow):
         scoreboard.clicked.connect(
             lambda: self._run_device(
                 "scoreboard",
-                lambda matrix: matrix.scoreboard(self.score_left.value(), self.score_right.value()),
+                ["scoreboard", str(self.score_left.value()), str(self.score_right.value())],
             )
         )
 
@@ -411,14 +404,15 @@ class MainWindow(QMainWindow):
         eco.clicked.connect(
             lambda: self._run_device(
                 "eco",
-                lambda matrix: matrix.eco(
-                    self.eco_flag.value(),
-                    self.eco_start_h.value(),
-                    self.eco_start_m.value(),
-                    self.eco_end_h.value(),
-                    self.eco_end_m.value(),
-                    self.eco_brightness.value(),
-                ),
+                [
+                    "eco",
+                    str(self.eco_flag.value()),
+                    str(self.eco_start_h.value()),
+                    str(self.eco_start_m.value()),
+                    str(self.eco_end_h.value()),
+                    str(self.eco_end_m.value()),
+                    str(self.eco_brightness.value()),
+                ],
             )
         )
 
@@ -476,7 +470,7 @@ class MainWindow(QMainWindow):
         self.raw_hex = QLineEdit("05 00 07 01 01")
         send_raw = QPushButton("Send Raw")
         send_raw.clicked.connect(
-            lambda: self._run_device("raw", lambda matrix: matrix.send(bytes.fromhex(self.raw_hex.text())))
+            lambda: self._run_device("raw", ["raw", self.raw_hex.text()])
         )
         decode = QPushButton("Decode")
         decode.clicked.connect(self.decode_hex)
@@ -560,45 +554,46 @@ class MainWindow(QMainWindow):
 
     def scan_devices(self) -> None:
         timeout = self.scan_timeout.value()
+        args = ["-m", "open_idotmatrix.cli", "scan", "--timeout", str(timeout)]
+        if not self.idm_only.isChecked():
+            args.append("--all")
+        self._run_process_json("scan", args, on_success=self._populate_devices)
 
-        async def job() -> list[dict[str, Any]]:
-            devices = await OpenIDotMatrix.scan(timeout=timeout)
-            return [device.__dict__ for device in devices]
-
-        self._run_async("scan", job, on_success=self._populate_devices)
+    def test_connection(self) -> None:
+        self._run_device("test connection", ["status"])
 
     def send_text(self) -> None:
         text = self.text_value.text()
-        font_path = self.font_path.text().strip() or None
-        self._run_device(
+        args = [
             "text",
-            lambda matrix: matrix.text(
-                text,
-                mode=self.text_mode.currentData(),
-                speed=self.text_speed.value(),
-                color_mode=self.text_color_mode.currentData(),
-                color=self._rgb(self.text_rgb),
-                background_mode=self.text_background_mode.currentData(),
-                background=self._rgb(self.text_bg_rgb),
-                font_path=font_path,
-                font_size=self.font_size.value(),
-            ),
-        )
+            text,
+            "--mode",
+            str(int(self.text_mode.currentData())),
+            "--speed",
+            str(self.text_speed.value()),
+            "--color-mode",
+            str(int(self.text_color_mode.currentData())),
+            "--rgb",
+            *self._rgb_args(self.text_rgb),
+            "--background-mode",
+            str(int(self.text_background_mode.currentData())),
+            "--background-rgb",
+            *self._rgb_args(self.text_bg_rgb),
+            "--font-size",
+            str(self.font_size.value()),
+        ]
+        font_path = self.font_path.text().strip()
+        if font_path:
+            args.extend(["--font-path", font_path])
+        self._run_device("text", args)
 
     def upload_gif(self) -> None:
         path = self.gif_path.text().strip()
-        self._run_device(
-            "gif",
-            lambda matrix: matrix.gif(
-                path,
-                process=not self.gif_raw.isChecked(),
-                total_length_mode=self.gif_total_length.currentData(),
-                wait_for_ack=not self.gif_no_ack.isChecked(),
-                response=not self.gif_no_response.isChecked(),
-                ack_timeout=self.gif_ack_timeout.value(),
-                sleep_between_chunks=self.gif_sleep.value(),
-            ),
-        )
+        args = ["gif", path]
+        if self.gif_raw.isChecked():
+            args.append("--raw")
+        args.extend(self._upload_args(self.gif_no_ack.isChecked(), self.gif_no_response.isChecked()))
+        self._run_device("gif", args)
 
     def export_gif_preview(self) -> None:
         try:
@@ -614,18 +609,55 @@ class MainWindow(QMainWindow):
         if paths:
             self._show_preview(paths[0])
 
+    def preview_image_32x32(self) -> None:
+        try:
+            path = save_matrix_image_preview(
+                self.image_path.text().strip(),
+                self.image_preview_path.text().strip(),
+                scale=16,
+                grid=True,
+            )
+        except Exception as exc:
+            self._append_error("image preview", exc)
+            return
+        self._append_result(
+            "image preview",
+            {
+                "path": str(path),
+                "conversion": "stretched to 1:1, nearest-neighbor sampled to 32x32",
+            },
+        )
+        self._show_preview(path)
+
+    def send_image(self) -> None:
+        path = self.image_path.text().strip()
+        if not path:
+            self._append_text("error: choose an image before sending it")
+            self._set_status("Missing image")
+            return
+        self._run_device(
+            "image",
+            ["image", path, *self._upload_args(self.image_no_ack.isChecked(), self.image_no_response.isChecked())],
+        )
+
     def send_effect(self) -> None:
         colors = self._parse_effect_colors(self.effect_colors.text())
         self._run_device(
             "effect",
-            lambda matrix: matrix.effect(colors=colors, style=self.effect_style.value(), speed=self.effect_speed.value()),
+            [
+                "effect",
+                str(self.effect_style.value()),
+                self._format_colors(colors),
+                "--speed",
+                str(self.effect_speed.value()),
+            ],
         )
 
     def delete_device_data(self) -> None:
         if not self.delete_confirm.isChecked():
             QMessageBox.warning(self, "Confirmation Required", "Enable the confirmation checkbox first.")
             return
-        self._run_device("delete-device-data", lambda matrix: matrix.delete_device_data())
+        self._run_device("delete-device-data", ["delete-device-data", "--yes"])
 
     def decode_hex(self) -> None:
         try:
@@ -700,37 +732,110 @@ class MainWindow(QMainWindow):
         self._append_result("simulate", {"path": str(path), "packet": info})
         self._show_preview(path)
 
-    def _run_device(self, title: str, operation: Callable[[OpenIDotMatrix], Awaitable[Any]]) -> None:
-        address = self.address_edit.text().strip() or None
+    def _run_device(self, title: str, command_args: list[str]) -> None:
+        args = ["-m", "open_idotmatrix.cli"]
+        address = self.address_edit.text().strip()
+        if address:
+            args.extend(["--address", address])
+        args.extend(command_args)
+        self._run_process_json(title, args)
 
-        async def job() -> Any:
-            async with OpenIDotMatrix(address=address) as matrix:
-                return await operation(matrix)
+    def _clock_args(self) -> list[str]:
+        args = ["clock", str(self.clock_style.value()), "--rgb", *self._rgb_args(self.clock_rgb)]
+        if not self.clock_date.isChecked():
+            args.append("--hide-date")
+        if not self.clock_24h.isChecked():
+            args.append("--hour12")
+        return args
 
-        self._run_async(title, job)
+    def _upload_args(self, no_ack: bool, no_response: bool) -> list[str]:
+        args = [
+            "--ack-timeout",
+            str(self.gif_ack_timeout.value()),
+            "--sleep-between-chunks",
+            str(self.gif_sleep.value()),
+            "--total-length-mode",
+            self.gif_total_length.currentData().value,
+        ]
+        if no_ack:
+            args.append("--no-ack")
+        if no_response:
+            args.append("--no-response")
+        return args
 
-    def _run_async(
+    def _rgb_args(self, spins: tuple[QSpinBox, QSpinBox, QSpinBox]) -> list[str]:
+        return [str(value) for value in self._rgb(spins)]
+
+    def _format_colors(self, colors: list[tuple[int, int, int]]) -> str:
+        return ";".join(f"{r},{g},{b}" for r, g, b in colors)
+
+    def _run_process_json(
         self,
         title: str,
-        job: AsyncJob,
+        args: list[str],
         *,
         on_success: Callable[[Any], None] | None = None,
     ) -> None:
+        if self._processes:
+            self._append_text("error: wait for the current device command to finish")
+            self._set_status("Busy")
+            return
         self._append_text(f"> {title}")
-        thread = QThread(self)
-        worker = AsyncWorker(job)
-        worker.moveToThread(thread)
-        thread.started.connect(worker.run)
-        worker.finished.connect(lambda result: self._append_result(title, result))
+        self._set_status(f"Running: {title}")
+        process = QProcess(self)
+        process.setProgram(sys.executable)
+        process.setArguments(args)
+        process.setProcessChannelMode(QProcess.ProcessChannelMode.SeparateChannels)
+        process.finished.connect(
+            lambda exit_code, exit_status, current=process: self._finish_process_json(
+                title,
+                current,
+                exit_code,
+                exit_status,
+                on_success=on_success,
+            )
+        )
+        process.errorOccurred.connect(
+            lambda error, current=process: self._fail_process_start(title, current, error)
+        )
+        self._processes.append(process)
+        process.start()
+
+    def _finish_process_json(
+        self,
+        title: str,
+        process: QProcess,
+        exit_code: int,
+        exit_status: QProcess.ExitStatus,
+        *,
+        on_success: Callable[[Any], None] | None = None,
+    ) -> None:
+        stdout = bytes(process.readAllStandardOutput()).decode(errors="replace").strip()
+        stderr = bytes(process.readAllStandardError()).decode(errors="replace").strip()
+        self._forget_process(process)
+        process.deleteLater()
+        if exit_status != QProcess.ExitStatus.NormalExit or exit_code != 0:
+            message = stderr or stdout or f"process exited with code {exit_code}"
+            self._append_text(f"error: {message}")
+            self._set_status(f"Error: {title}")
+            return
+        try:
+            result = json.loads(stdout or "null")
+        except json.JSONDecodeError as exc:
+            self._append_text(f"error: could not decode {title} output: {exc}\n{stdout}")
+            self._set_status(f"Error: {title}")
+            return
+        self._append_result(title, result)
+        self._set_status(f"OK: {title}")
         if on_success is not None:
-            worker.finished.connect(on_success)
-        worker.failed.connect(lambda message: self._append_text(f"error: {message}"))
-        worker.done.connect(thread.quit)
-        worker.done.connect(worker.deleteLater)
-        thread.finished.connect(thread.deleteLater)
-        thread.finished.connect(lambda: self._forget_thread(thread))
-        self._threads.append(thread)
-        thread.start()
+            on_success(result)
+
+    def _fail_process_start(self, title: str, process: QProcess, error: QProcess.ProcessError) -> None:
+        message = process.errorString() or str(error)
+        self._forget_process(process)
+        process.deleteLater()
+        self._append_text(f"error: {message}")
+        self._set_status(f"Error: {title}")
 
     def _populate_devices(self, devices: list[dict[str, Any]]) -> None:
         self.device_combo.blockSignals(True)
@@ -742,6 +847,9 @@ class MainWindow(QMainWindow):
         if devices:
             self.device_combo.setCurrentIndex(0)
             self.address_edit.setText(str(devices[0]["address"]))
+            self._set_status(f"Scan found {len(devices)} device(s)")
+        else:
+            self._set_status("Scan found 0 devices")
 
     def _select_scanned_device(self) -> None:
         address = self.device_combo.currentData()
@@ -757,6 +865,9 @@ class MainWindow(QMainWindow):
     def _append_text(self, text: str) -> None:
         self.log.append(text)
 
+    def _set_status(self, text: str) -> None:
+        self.status_label.setText(text)
+
     def _show_preview(self, path: str | Path) -> None:
         pixmap = QPixmap(str(path))
         if pixmap.isNull():
@@ -768,9 +879,9 @@ class MainWindow(QMainWindow):
         )
         self.preview_label.setPixmap(scaled)
 
-    def _forget_thread(self, thread: QThread) -> None:
-        if thread in self._threads:
-            self._threads.remove(thread)
+    def _forget_process(self, process: QProcess) -> None:
+        if process in self._processes:
+            self._processes.remove(process)
 
     def _browse_open(self, line_edit: QLineEdit, title: str) -> None:
         path, _selected = QFileDialog.getOpenFileName(self, title)

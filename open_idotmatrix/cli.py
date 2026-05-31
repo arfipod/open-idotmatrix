@@ -9,6 +9,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from .constants import DEVICE_NAME_PREFIX
 from .device import OpenIDotMatrix
 from .exceptions import OpenIDotMatrixError, ProtocolError
 from .protocol import parse_packet
@@ -42,7 +43,8 @@ def _parse_effect_colors(value: str) -> list[tuple[int, int, int]]:
 
 
 async def _cmd_scan(args: argparse.Namespace) -> None:
-    devices = await OpenIDotMatrix.scan(timeout=args.timeout)
+    name_prefix = "" if args.all else args.name_prefix
+    devices = await OpenIDotMatrix.scan(timeout=args.timeout, name_prefix=name_prefix)
     _json([device.__dict__ for device in devices])
 
 
@@ -52,7 +54,12 @@ async def _run_hardware_command(args: argparse.Namespace) -> None:
 
     async with OpenIDotMatrix(address=args.address) as matrix:
         command = args.command
-        if command == "on":
+        if command == "status":
+            result = {
+                "address": args.address or matrix.transport.address,
+                "connected": matrix.transport.is_connected(),
+            }
+        elif command == "on":
             result = await matrix.on()
         elif command == "off":
             result = await matrix.off()
@@ -88,6 +95,15 @@ async def _run_hardware_command(args: argparse.Namespace) -> None:
             result = await matrix.gif(
                 args.path,
                 process=not args.raw,
+                total_length_mode=GifTotalLengthMode(args.total_length_mode),
+                wait_for_ack=not args.no_ack,
+                response=not args.no_response,
+                ack_timeout=args.ack_timeout,
+                sleep_between_chunks=args.sleep_between_chunks,
+            )
+        elif command == "image":
+            result = await matrix.image(
+                args.path,
                 total_length_mode=GifTotalLengthMode(args.total_length_mode),
                 wait_for_ack=not args.no_ack,
                 response=not args.no_response,
@@ -185,10 +201,14 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("scan", help="Scan for IDM-* BLE devices")
     p.add_argument("--timeout", type=float, default=5.0)
+    p.add_argument("--name-prefix", default=DEVICE_NAME_PREFIX, help="Filter devices by advertised local-name prefix")
+    p.add_argument("--all", action="store_true", help="Do not filter by advertised local-name prefix")
     p.set_defaults(func=_cmd_scan)
 
     for name in ("on", "off", "reset", "freeze"):
         sub.add_parser(name, help=f"Send {name} command")
+
+    sub.add_parser("status", help="Connect to the device and report connection state")
 
     p = sub.add_parser("brightness", help="Set brightness percent, usually 5..100")
     p.add_argument("percent", type=int)
@@ -235,6 +255,14 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--no-response", action="store_true", help="Use GATT write without response")
     p.add_argument("--ack-timeout", type=float, default=10.0, help="Seconds to wait for each GIF ACK")
     p.add_argument("--sleep-between-chunks", type=float, default=1.0, help="Delay when sending GIF chunks without ACK")
+    p.add_argument("--total-length-mode", choices=[m.value for m in GifTotalLengthMode], default=GifTotalLengthMode.INCLUDE_HEADERS.value)
+
+    p = sub.add_parser("image", help="Distort any image to 1:1, subsample to 32x32, and upload it")
+    p.add_argument("path")
+    p.add_argument("--no-ack", action="store_true", help="Do not wait for protocol notifications between chunks")
+    p.add_argument("--no-response", action="store_true", help="Use GATT write without response")
+    p.add_argument("--ack-timeout", type=float, default=10.0, help="Seconds to wait for each image ACK")
+    p.add_argument("--sleep-between-chunks", type=float, default=1.0, help="Delay when sending image chunks without ACK")
     p.add_argument("--total-length-mode", choices=[m.value for m in GifTotalLengthMode], default=GifTotalLengthMode.INCLUDE_HEADERS.value)
 
     p = sub.add_parser("clock", help="Show device clock")

@@ -340,6 +340,18 @@ Expected notifications:
 05 00 01 00 03 = upload finished
 ```
 
+## Still Images
+
+Still images are uploaded through the same GIF chunk protocol. The image path is:
+
+1. load the first frame of any Pillow-supported image;
+2. stretch or squash it directly to a 1:1 square;
+3. nearest-neighbor sample it to 32x32;
+4. encode it as a single-frame GIF;
+5. upload it with the GIF chunk protocol above.
+
+This intentionally does not preserve aspect ratio. It matches the behavior requested for LED-matrix display: every source image fills the entire 32x32 matrix.
+
 ## PNG / DIY Image
 
 An experimental `build_png_payloads_experimental` function exists. It is not included in the main API because single-frame GIFs should be safer for still images until more traces are validated.

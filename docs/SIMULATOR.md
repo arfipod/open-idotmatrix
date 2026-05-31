@@ -54,6 +54,12 @@ Preview the first GIF frame:
 open-idotmatrix simulate --gif demo.gif --save out/demo_first_frame.png
 ```
 
+Upload a still image after stretching it to 1:1 and nearest-neighbor sampling to 32x32:
+
+```bash
+open-idotmatrix --address AA:BB:CC:DD:EE:FF image picture.jpg --no-response --no-ack
+```
+
 Export GIF frames:
 
 ```bash

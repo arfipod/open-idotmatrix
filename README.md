@@ -124,6 +124,14 @@ GIF:
 open-idotmatrix --address AA:BB:CC:DD:EE:FF gif ./demo.gif
 ```
 
+Still image:
+
+```bash
+open-idotmatrix --address AA:BB:CC:DD:EE:FF image ./picture.jpg --no-response --no-ack
+```
+
+The `image` command accepts any Pillow-supported image, stretches it to a 1:1 square, nearest-neighbor samples it to 32x32, and uploads it as a single-frame GIF.
+
 If notification ACK handling fails during early GIF testing:
 
 ```bash
@@ -139,6 +147,7 @@ The PySide6 app exposes the same operation families as the CLI:
 - fill, pixel, and spiral;
 - text with animation, color, background, and font controls;
 - GIF upload with raw, ACK, response, timeout, and total-length options;
+- still-image upload with explicit 32x32 preview and nearest-neighbor subsampling;
 - clock, chronograph, countdown, scoreboard, ECO, and effects;
 - raw hex, decode, simulator, text animation, and gif-preview tools;
 - delete-device-data with explicit confirmation.

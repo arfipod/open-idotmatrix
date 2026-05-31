@@ -8,7 +8,7 @@ from datetime import datetime
 from pathlib import Path
 
 from .constants import ACK_CHUNK_OK, ACK_UPLOAD_DONE, WIDTH
-from .gif import gif_chunks_from_file
+from .gif import gif_chunks_from_file, image_chunks_from_file
 from .protocol import (
     build_chronograph,
     build_clock_mode,
@@ -51,8 +51,8 @@ class OpenIDotMatrix:
         self.transport = transport or BleTransport(address=address)
 
     @classmethod
-    async def scan(cls, *, timeout: float = 5.0) -> list[DiscoveredDevice]:
-        return await BleTransport.scan(timeout=timeout)
+    async def scan(cls, *, timeout: float = 5.0, name_prefix: str = "IDM-") -> list[DiscoveredDevice]:
+        return await BleTransport.scan(timeout=timeout, name_prefix=name_prefix)
 
     async def connect(self) -> None:
         await self.transport.connect()
@@ -156,6 +156,30 @@ class OpenIDotMatrix:
         sleep_between_chunks: float = 1.0,
     ) -> list[dict]:
         chunks = gif_chunks_from_file(path, process=process, pixel_size=WIDTH, total_length_mode=total_length_mode)
+        if wait_for_ack:
+            await self.transport.start_notifications()
+        results = []
+        for index, chunk in enumerate(chunks):
+            await self.transport.write(chunk.data, response=response)
+            results.append(parse_packet(chunk.data))
+            if wait_for_ack:
+                expected = expected_gif_ack_for_chunk(index, len(chunks))
+                await self.transport.wait_for_notification(expected, timeout=ack_timeout)
+            elif sleep_between_chunks:
+                await asyncio.sleep(sleep_between_chunks)
+        return results
+
+    async def image(
+        self,
+        path: str | Path,
+        *,
+        total_length_mode: GifTotalLengthMode = GifTotalLengthMode.INCLUDE_HEADERS,
+        wait_for_ack: bool = True,
+        response: bool = True,
+        ack_timeout: float = 10.0,
+        sleep_between_chunks: float = 1.0,
+    ) -> list[dict]:
+        chunks = image_chunks_from_file(path, pixel_size=WIDTH, total_length_mode=total_length_mode)
         if wait_for_ack:
             await self.transport.start_notifications()
         results = []
