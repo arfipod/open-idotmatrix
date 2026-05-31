@@ -159,7 +159,7 @@ class MainWindow(QMainWindow):
             self.year_mode.addItem(mode.value, mode)
         sync = QPushButton("Sync Time")
         sync.clicked.connect(
-            lambda: self._run_device("sync time", ["sync-time", "--year-mode", self.year_mode.currentData().value])
+            lambda: self._run_device("sync time", ["sync-time", "--year-mode", self._combo_value(self.year_mode)])
         )
 
         layout.addWidget(on, 0, 0)
@@ -755,7 +755,7 @@ class MainWindow(QMainWindow):
             "--sleep-between-chunks",
             str(self.gif_sleep.value()),
             "--total-length-mode",
-            self.gif_total_length.currentData().value,
+            self._combo_value(self.gif_total_length),
         ]
         if no_ack:
             args.append("--no-ack")
@@ -768,6 +768,10 @@ class MainWindow(QMainWindow):
 
     def _format_colors(self, colors: list[tuple[int, int, int]]) -> str:
         return ";".join(f"{r},{g},{b}" for r, g, b in colors)
+
+    def _combo_value(self, combo: QComboBox) -> str:
+        data = combo.currentData()
+        return str(getattr(data, "value", data))
 
     def _run_process_json(
         self,
