@@ -42,6 +42,14 @@ def _parse_effect_colors(value: str) -> list[tuple[int, int, int]]:
     return colors
 
 
+def _validate_file_arg(value: str, label: str) -> None:
+    path = Path(value).expanduser()
+    if not path.exists():
+        raise ProtocolError(f"{label} file does not exist: {value}")
+    if path.is_dir():
+        raise ProtocolError(f"{label} path must be a file, not a directory: {value}")
+
+
 async def _cmd_scan(args: argparse.Namespace) -> None:
     name_prefix = "" if args.all else args.name_prefix
     devices = await OpenIDotMatrix.scan(timeout=args.timeout, name_prefix=name_prefix)
@@ -51,6 +59,10 @@ async def _cmd_scan(args: argparse.Namespace) -> None:
 async def _run_hardware_command(args: argparse.Namespace) -> None:
     if args.command == "delete-device-data" and not args.yes:
         raise ProtocolError("delete-device-data requires --yes because it is destructive")
+    if args.command == "gif":
+        _validate_file_arg(args.path, "GIF")
+    if args.command == "image":
+        _validate_file_arg(args.path, "image")
 
     async with OpenIDotMatrix(address=args.address) as matrix:
         command = args.command
@@ -356,6 +368,9 @@ def main(argv: list[str] | None = None) -> int:
             asyncio.run(_run_hardware_command(args))
         return 0
     except OpenIDotMatrixError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    except (OSError, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
     except KeyboardInterrupt:

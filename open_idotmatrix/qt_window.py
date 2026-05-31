@@ -274,9 +274,18 @@ class MainWindow(QMainWindow):
         self.gif_path = QLineEdit()
         gif_browse = QPushButton("Browse")
         gif_browse.clicked.connect(lambda: self._browse_open(self.gif_path, "Select GIF or Image"))
+        self.media_path = QLineEdit()
+        media_browse = QPushButton("Browse")
+        media_browse.clicked.connect(lambda: self._browse_open(self.media_path, "Select Image or GIF"))
+        preview_media = QPushButton("Preview 32x32")
+        preview_media.clicked.connect(self.preview_media_32x32)
+        send_media = QPushButton("Send to Display")
+        send_media.clicked.connect(self.send_media)
         self.gif_raw = QCheckBox("Raw")
         self.gif_no_ack = QCheckBox("No ACK")
         self.gif_no_response = QCheckBox("No Response")
+        self.gif_no_ack.setChecked(True)
+        self.gif_no_response.setChecked(True)
         self.gif_total_length = QComboBox()
         for mode in GifTotalLengthMode:
             self.gif_total_length.addItem(mode.value, mode)
@@ -307,35 +316,40 @@ class MainWindow(QMainWindow):
         send_image = QPushButton("Send Image")
         send_image.clicked.connect(self.send_image)
 
-        gif_layout.addWidget(QLabel("Path"), 0, 0)
-        gif_layout.addWidget(self.gif_path, 0, 1, 1, 2)
-        gif_layout.addWidget(gif_browse, 0, 3)
-        gif_layout.addWidget(self.gif_raw, 1, 0)
-        gif_layout.addWidget(self.gif_no_ack, 1, 1)
-        gif_layout.addWidget(self.gif_no_response, 1, 2)
-        gif_layout.addWidget(QLabel("Length Mode"), 2, 0)
-        gif_layout.addWidget(self.gif_total_length, 2, 1)
-        gif_layout.addWidget(QLabel("ACK Timeout"), 3, 0)
-        gif_layout.addWidget(self.gif_ack_timeout, 3, 1)
-        gif_layout.addWidget(QLabel("Sleep"), 3, 2)
-        gif_layout.addWidget(self.gif_sleep, 3, 3)
-        gif_layout.addWidget(upload_gif, 4, 0)
-        gif_layout.addWidget(QLabel("Preview Out"), 5, 0)
-        gif_layout.addWidget(self.gif_preview_out, 5, 1, 1, 2)
-        gif_layout.addWidget(preview_browse, 5, 3)
-        gif_layout.addWidget(QLabel("Frames"), 6, 0)
-        gif_layout.addWidget(self.gif_preview_max, 6, 1)
-        gif_layout.addWidget(make_preview, 6, 2)
-        gif_layout.addWidget(QLabel("Image Path"), 8, 0)
-        gif_layout.addWidget(self.image_path, 8, 1, 1, 2)
-        gif_layout.addWidget(image_browse, 8, 3)
-        gif_layout.addWidget(QLabel("32x32 Preview"), 9, 0)
-        gif_layout.addWidget(self.image_preview_path, 9, 1, 1, 2)
-        gif_layout.addWidget(image_preview_browse, 9, 3)
-        gif_layout.addWidget(self.image_no_ack, 10, 0)
-        gif_layout.addWidget(self.image_no_response, 10, 1)
-        gif_layout.addWidget(preview_image, 10, 2)
-        gif_layout.addWidget(send_image, 10, 3)
+        gif_layout.addWidget(QLabel("File"), 0, 0)
+        gif_layout.addWidget(self.media_path, 0, 1, 1, 2)
+        gif_layout.addWidget(media_browse, 0, 3)
+        gif_layout.addWidget(preview_media, 1, 2)
+        gif_layout.addWidget(send_media, 1, 3)
+        gif_layout.addWidget(QLabel("GIF Path"), 3, 0)
+        gif_layout.addWidget(self.gif_path, 3, 1, 1, 2)
+        gif_layout.addWidget(gif_browse, 3, 3)
+        gif_layout.addWidget(self.gif_raw, 4, 0)
+        gif_layout.addWidget(self.gif_no_ack, 4, 1)
+        gif_layout.addWidget(self.gif_no_response, 4, 2)
+        gif_layout.addWidget(QLabel("Length Mode"), 5, 0)
+        gif_layout.addWidget(self.gif_total_length, 5, 1)
+        gif_layout.addWidget(QLabel("ACK Timeout"), 6, 0)
+        gif_layout.addWidget(self.gif_ack_timeout, 6, 1)
+        gif_layout.addWidget(QLabel("Sleep"), 6, 2)
+        gif_layout.addWidget(self.gif_sleep, 6, 3)
+        gif_layout.addWidget(upload_gif, 7, 0)
+        gif_layout.addWidget(QLabel("Preview Out"), 8, 0)
+        gif_layout.addWidget(self.gif_preview_out, 8, 1, 1, 2)
+        gif_layout.addWidget(preview_browse, 8, 3)
+        gif_layout.addWidget(QLabel("Frames"), 9, 0)
+        gif_layout.addWidget(self.gif_preview_max, 9, 1)
+        gif_layout.addWidget(make_preview, 9, 2)
+        gif_layout.addWidget(QLabel("Image Path"), 11, 0)
+        gif_layout.addWidget(self.image_path, 11, 1, 1, 2)
+        gif_layout.addWidget(image_browse, 11, 3)
+        gif_layout.addWidget(QLabel("32x32 Preview"), 12, 0)
+        gif_layout.addWidget(self.image_preview_path, 12, 1, 1, 2)
+        gif_layout.addWidget(image_preview_browse, 12, 3)
+        gif_layout.addWidget(self.image_no_ack, 13, 0)
+        gif_layout.addWidget(self.image_no_response, 13, 1)
+        gif_layout.addWidget(preview_image, 13, 2)
+        gif_layout.addWidget(send_image, 13, 3)
         return tab
 
     def _modes_tab(self) -> QWidget:
@@ -588,7 +602,9 @@ class MainWindow(QMainWindow):
         self._run_device("text", args)
 
     def upload_gif(self) -> None:
-        path = self.gif_path.text().strip()
+        path = self._selected_file(self.gif_path, "GIF")
+        if path is None:
+            return
         args = ["gif", path]
         if self.gif_raw.isChecked():
             args.append("--raw")
@@ -596,9 +612,12 @@ class MainWindow(QMainWindow):
         self._run_device("gif", args)
 
     def export_gif_preview(self) -> None:
+        path = self._selected_file(self.gif_path, "GIF")
+        if path is None:
+            return
         try:
             paths = save_gif_preview_frames(
-                self.gif_path.text().strip(),
+                path,
                 self.gif_preview_out.text().strip(),
                 max_frames=self.gif_preview_max.value(),
             )
@@ -609,10 +628,31 @@ class MainWindow(QMainWindow):
         if paths:
             self._show_preview(paths[0])
 
+    def preview_media_32x32(self) -> None:
+        path = self._selected_file(self.media_path, "media")
+        if path is None:
+            return
+        self.image_path.setText(path)
+        self.preview_image_32x32()
+
+    def send_media(self) -> None:
+        path = self._selected_file(self.media_path, "media")
+        if path is None:
+            return
+        if Path(path).suffix.lower() == ".gif":
+            self.gif_path.setText(path)
+            self.upload_gif()
+            return
+        self.image_path.setText(path)
+        self.send_image()
+
     def preview_image_32x32(self) -> None:
+        path = self._selected_file(self.image_path, "image")
+        if path is None:
+            return
         try:
             path = save_matrix_image_preview(
-                self.image_path.text().strip(),
+                path,
                 self.image_preview_path.text().strip(),
                 scale=16,
                 grid=True,
@@ -630,10 +670,8 @@ class MainWindow(QMainWindow):
         self._show_preview(path)
 
     def send_image(self) -> None:
-        path = self.image_path.text().strip()
-        if not path:
-            self._append_text("error: choose an image before sending it")
-            self._set_status("Missing image")
+        path = self._selected_file(self.image_path, "image")
+        if path is None:
             return
         self._run_device(
             "image",
@@ -720,9 +758,12 @@ class MainWindow(QMainWindow):
             self._append_error("simulate pixel", exc)
 
     def simulate_gif(self) -> None:
+        path = self._selected_file(self.sim_gif, "GIF")
+        if path is None:
+            return
         try:
             sim = MatrixSimulator()
-            sim.load_gif_preview(self.sim_gif.text().strip())
+            sim.load_gif_preview(path)
             self._save_sim(sim)
         except Exception as exc:
             self._append_error("simulate gif", exc)
@@ -772,6 +813,23 @@ class MainWindow(QMainWindow):
     def _combo_value(self, combo: QComboBox) -> str:
         data = combo.currentData()
         return str(getattr(data, "value", data))
+
+    def _selected_file(self, line_edit: QLineEdit, label: str) -> str | None:
+        value = line_edit.text().strip()
+        if not value:
+            self._append_text(f"error: choose a {label} file first")
+            self._set_status(f"Missing {label} file")
+            return None
+        path = Path(value).expanduser()
+        if not path.exists():
+            self._append_text(f"error: {label} file does not exist: {value}")
+            self._set_status(f"Missing {label} file")
+            return None
+        if path.is_dir():
+            self._append_text(f"error: choose a {label} file, not a directory: {value}")
+            self._set_status(f"Invalid {label} path")
+            return None
+        return str(path)
 
     def _run_process_json(
         self,

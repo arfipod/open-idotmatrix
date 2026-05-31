@@ -146,6 +146,7 @@ The PySide6 app exposes the same operation families as the CLI:
 - on/off, reset, freeze, brightness, flip, and sync-time;
 - fill, pixel, and spiral;
 - text with animation, color, background, and font controls;
+- one-file image/GIF upload: choose a file, preview the 32x32 result, then send it;
 - GIF upload with raw, ACK, response, timeout, and total-length options;
 - still-image upload with explicit 32x32 preview and nearest-neighbor subsampling;
 - clock, chronograph, countdown, scoreboard, ECO, and effects;
