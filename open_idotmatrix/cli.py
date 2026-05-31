@@ -1,0 +1,284 @@
+"""Command-line interface for open-idotmatrix."""
+
+from __future__ import annotations
+
+import argparse
+import asyncio
+import json
+import sys
+from pathlib import Path
+from typing import Any
+
+from .device import OpenIDotMatrix
+from .exceptions import OpenIDotMatrixError, ProtocolError
+from .protocol import parse_packet
+from .simulator import MatrixSimulator, save_gif_preview_frames, save_text_animation, simulate_text_frame
+from .types import GifTotalLengthMode, TextMode, YearByteMode
+
+
+def _json(data: Any) -> None:
+    print(json.dumps(data, indent=2, sort_keys=True, default=str))
+
+
+def _rgb(values: list[str] | tuple[str, str, str]) -> tuple[int, int, int]:
+    if len(values) != 3:
+        raise ProtocolError("expected three RGB values")
+    return tuple(int(v) for v in values)  # type: ignore[return-value]
+
+
+def _parse_effect_colors(value: str) -> list[tuple[int, int, int]]:
+    colors = []
+    for chunk in value.split(";"):
+        parts = [int(p.strip()) for p in chunk.split(",")]
+        if len(parts) != 3:
+            raise ProtocolError("effect colors must look like '255,0,0;0,255,0'")
+        colors.append((parts[0], parts[1], parts[2]))
+    return colors
+
+
+async def _cmd_scan(args: argparse.Namespace) -> None:
+    devices = await OpenIDotMatrix.scan(timeout=args.timeout)
+    _json([device.__dict__ for device in devices])
+
+
+async def _run_hardware_command(args: argparse.Namespace) -> None:
+    async with OpenIDotMatrix(address=args.address) as matrix:
+        command = args.command
+        if command == "on":
+            result = await matrix.on()
+        elif command == "off":
+            result = await matrix.off()
+        elif command == "reset":
+            result = await matrix.reset()
+        elif command == "brightness":
+            result = await matrix.set_brightness(args.percent)
+        elif command == "sync-time":
+            result = await matrix.sync_time(year_mode=YearByteMode(args.year_mode))
+        elif command == "fill":
+            result = await matrix.fill((args.r, args.g, args.b))
+        elif command == "pixel":
+            result = await matrix.pixel(args.x, args.y, (args.r, args.g, args.b))
+        elif command == "spiral":
+            result = await matrix.spiral((args.r, args.g, args.b), delay=args.delay)
+        elif command == "text":
+            result = await matrix.text(
+                args.text,
+                mode=TextMode(args.mode),
+                speed=args.speed,
+                color=(args.r, args.g, args.b),
+                font_path=args.font_path,
+                font_size=args.font_size,
+            )
+        elif command == "gif":
+            result = await matrix.gif(
+                args.path,
+                process=not args.raw,
+                total_length_mode=GifTotalLengthMode(args.total_length_mode),
+                wait_for_ack=not args.no_ack,
+                response=not args.no_response,
+            )
+        elif command == "clock":
+            result = await matrix.clock(
+                args.style,
+                visible_date=not args.hide_date,
+                hour24=not args.hour12,
+                color=(args.r, args.g, args.b),
+            )
+        elif command == "scoreboard":
+            result = await matrix.scoreboard(args.left, args.right)
+        elif command == "countdown":
+            result = await matrix.countdown(args.mode, args.minutes, args.seconds)
+        elif command == "effect":
+            result = await matrix.effect(args.style, _parse_effect_colors(args.colors), speed=args.speed)
+        elif command == "raw":
+            result = await matrix.send(bytes.fromhex(args.hex))
+        else:  # pragma: no cover - argparse guards this
+            raise ProtocolError(f"unknown command: {command}")
+    _json(result)
+
+
+def _cmd_decode(args: argparse.Namespace) -> None:
+    _json(parse_packet(bytes.fromhex(args.hex)))
+
+
+def _cmd_simulate(args: argparse.Namespace) -> None:
+    out_path = Path(args.save) if args.save else Path("out/simulation.png")
+    if args.text_animation:
+        path = save_text_animation(
+            args.text_animation,
+            out_path.with_suffix(".gif"),
+            frames=args.frames,
+            scale=args.scale,
+            color=(args.r, args.g, args.b),
+            font_path=args.font_path,
+            font_size=args.font_size,
+        )
+        print(path)
+        return
+
+    sim = MatrixSimulator()
+    if args.fill:
+        sim.fill(_rgb(args.fill))
+    if args.gif:
+        sim.load_gif_preview(args.gif)
+    if args.text:
+        sim = simulate_text_frame(
+            args.text,
+            offset=args.offset,
+            color=(args.r, args.g, args.b),
+            font_path=args.font_path,
+            font_size=args.font_size,
+        )
+    if args.packet_hex:
+        sim.apply_packet(bytes.fromhex(args.packet_hex), text_scroll_offset=args.offset)
+    for pixel in args.pixel or []:
+        x, y, r, g, b = [int(v) for v in pixel]
+        sim.set_pixel(x, y, (r, g, b))
+    path = sim.save(out_path, scale=args.scale, grid=not args.no_grid)
+    print(path)
+    if args.show:
+        sim.show(scale=args.scale, grid=not args.no_grid)
+
+
+def _cmd_gif_preview(args: argparse.Namespace) -> None:
+    paths = save_gif_preview_frames(args.path, args.out_dir, scale=args.scale, max_frames=args.max_frames)
+    _json([str(path) for path in paths])
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="open-idotmatrix",
+        description="Control and reverse-engineer iDotMatrix 32x32 BLE pixel displays.",
+    )
+    parser.add_argument("--address", help="BLE MAC/address. If omitted, hardware commands connect to first IDM-* device found.")
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    p = sub.add_parser("scan", help="Scan for IDM-* BLE devices")
+    p.add_argument("--timeout", type=float, default=5.0)
+    p.set_defaults(func=_cmd_scan)
+
+    for name in ("on", "off", "reset"):
+        sub.add_parser(name, help=f"Send {name} command")
+
+    p = sub.add_parser("brightness", help="Set brightness percent, usually 5..100")
+    p.add_argument("percent", type=int)
+
+    p = sub.add_parser("sync-time", help="Sync device time")
+    p.add_argument("--year-mode", choices=[m.value for m in YearByteMode], default=YearByteMode.LOW_BYTE.value)
+
+    p = sub.add_parser("fill", help="Fill whole display with one color")
+    p.add_argument("r", type=int)
+    p.add_argument("g", type=int)
+    p.add_argument("b", type=int)
+
+    p = sub.add_parser("pixel", help="Set one pixel")
+    p.add_argument("x", type=int)
+    p.add_argument("y", type=int)
+    p.add_argument("r", type=int)
+    p.add_argument("g", type=int)
+    p.add_argument("b", type=int)
+
+    p = sub.add_parser("spiral", help="Draw a generated spiral with pixel commands")
+    p.add_argument("r", type=int, nargs="?", default=255)
+    p.add_argument("g", type=int, nargs="?", default=0)
+    p.add_argument("b", type=int, nargs="?", default=0)
+    p.add_argument("--delay", type=float, default=0.0)
+
+    p = sub.add_parser("text", help="Send text")
+    p.add_argument("text")
+    p.add_argument("--mode", type=int, default=TextMode.SCROLL_LEFT_TO_RIGHT)
+    p.add_argument("--speed", type=int, default=95)
+    p.add_argument("--rgb", dest="rgb", nargs=3, default=["255", "255", "255"], metavar=("R", "G", "B"))
+    p.add_argument("--font-path")
+    p.add_argument("--font-size", type=int, default=24)
+
+    p = sub.add_parser("gif", help="Upload GIF/image as 32x32 GIF")
+    p.add_argument("path")
+    p.add_argument("--raw", action="store_true", help="Do not resize/re-encode; file must already be 32x32")
+    p.add_argument("--no-ack", action="store_true", help="Do not wait for protocol notifications between chunks")
+    p.add_argument("--no-response", action="store_true", help="Use GATT write without response")
+    p.add_argument("--total-length-mode", choices=[m.value for m in GifTotalLengthMode], default=GifTotalLengthMode.INCLUDE_HEADERS.value)
+
+    p = sub.add_parser("clock", help="Show device clock")
+    p.add_argument("style", type=int)
+    p.add_argument("--hide-date", action="store_true")
+    p.add_argument("--hour12", action="store_true")
+    p.add_argument("--rgb", nargs=3, default=["255", "255", "255"], metavar=("R", "G", "B"))
+
+    p = sub.add_parser("scoreboard", help="Set scoreboard")
+    p.add_argument("left", type=int)
+    p.add_argument("right", type=int)
+
+    p = sub.add_parser("countdown", help="Set countdown mode/time")
+    p.add_argument("mode", type=int)
+    p.add_argument("minutes", type=int)
+    p.add_argument("seconds", type=int)
+
+    p = sub.add_parser("effect", help="Set effect mode")
+    p.add_argument("style", type=int)
+    p.add_argument("colors", help="Semicolon-separated RGB triples, e.g. '255,0,0;0,255,0'")
+    p.add_argument("--speed", type=int, default=90)
+
+    p = sub.add_parser("raw", help="Send raw hex bytes")
+    p.add_argument("hex")
+
+    p = sub.add_parser("decode", help="Decode/inspect raw hex bytes without hardware")
+    p.add_argument("hex")
+    p.set_defaults(func=_cmd_decode)
+
+    p = sub.add_parser("simulate", help="Render a simulated 32x32 frame without hardware")
+    p.add_argument("--text")
+    p.add_argument("--text-animation", help="Save animated text preview as GIF")
+    p.add_argument("--gif", help="Load first GIF/image frame into simulator")
+    p.add_argument("--packet-hex", help="Apply one raw protocol packet")
+    p.add_argument("--fill", nargs=3, metavar=("R", "G", "B"))
+    p.add_argument("--pixel", nargs=5, action="append", metavar=("X", "Y", "R", "G", "B"))
+    p.add_argument("--rgb", nargs=3, default=["255", "255", "255"], metavar=("R", "G", "B"))
+    p.add_argument("--offset", type=int, default=0)
+    p.add_argument("--frames", type=int, default=64)
+    p.add_argument("--save", default="out/simulation.png")
+    p.add_argument("--scale", type=int, default=16)
+    p.add_argument("--no-grid", action="store_true")
+    p.add_argument("--show", action="store_true")
+    p.add_argument("--font-path")
+    p.add_argument("--font-size", type=int, default=24)
+    p.set_defaults(func=_cmd_simulate)
+
+    p = sub.add_parser("gif-preview", help="Export scaled PNG preview frames from a GIF/image")
+    p.add_argument("path")
+    p.add_argument("out_dir")
+    p.add_argument("--scale", type=int, default=16)
+    p.add_argument("--max-frames", type=int, default=16)
+    p.set_defaults(func=_cmd_gif_preview)
+
+    return parser
+
+
+def _normalize_rgb_args(args: argparse.Namespace) -> None:
+    if hasattr(args, "rgb"):
+        args.r, args.g, args.b = _rgb(args.rgb)
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    _normalize_rgb_args(args)
+    try:
+        if hasattr(args, "func"):
+            result = args.func(args)
+            if asyncio.iscoroutine(result):
+                asyncio.run(result)
+        elif args.command == "scan":
+            asyncio.run(_cmd_scan(args))
+        else:
+            asyncio.run(_run_hardware_command(args))
+        return 0
+    except OpenIDotMatrixError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    except KeyboardInterrupt:
+        return 130
+
+
+if __name__ == "__main__":  # pragma: no cover
+    raise SystemExit(main())
