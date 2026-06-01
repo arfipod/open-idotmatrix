@@ -6,9 +6,11 @@ import asyncio
 import contextlib
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
+from pathlib import Path
 
 from .constants import DEVICE_NAME_PREFIX, NOTIFY_UUID, WRITE_UUID
 from .exceptions import AckTimeoutError, DeviceNotFoundError, TransportError
+from .session import SessionLogger
 
 NotificationCallback = Callable[[bytes], None]
 
@@ -36,15 +38,32 @@ class BleTransport:
         write_uuid: str = WRITE_UUID,
         notify_uuid: str = NOTIFY_UUID,
         inter_write_delay: float = 0.01,
+        gatt_chunk_size: int | None = None,
+        session_logger: SessionLogger | str | Path | None = None,
+        append_session_log: bool = False,
     ) -> None:
         self.address = address
         self.name_prefix = name_prefix
         self.write_uuid = write_uuid
         self.notify_uuid = notify_uuid
         self.inter_write_delay = inter_write_delay
+        if gatt_chunk_size is not None and gatt_chunk_size <= 0:
+            raise TransportError("gatt_chunk_size must be positive")
+        self.gatt_chunk_size = gatt_chunk_size
+        self.session_logger = self._coerce_session_logger(session_logger, append=append_session_log)
         self.client = None
         self._notification_queue: asyncio.Queue[bytes] | None = None
         self._user_notification_callback: NotificationCallback | None = None
+
+    @staticmethod
+    def _coerce_session_logger(
+        logger: SessionLogger | str | Path | None,
+        *,
+        append: bool = False,
+    ) -> SessionLogger | None:
+        if logger is None or isinstance(logger, SessionLogger):
+            return logger
+        return SessionLogger(logger, append=append)
 
     @staticmethod
     def _import_bleak():
@@ -107,6 +126,8 @@ class BleTransport:
         return bool(self.client is not None and self.client.is_connected)
 
     def _gatt_chunk_size(self, *, response: bool) -> int:
+        if self.gatt_chunk_size is not None:
+            return self.gatt_chunk_size
         if self.client is None:
             return 20
         try:
@@ -130,8 +151,31 @@ class BleTransport:
         for offset in range(0, len(data), chunk_size):
             chunk = data[offset : offset + chunk_size]
             await self.client.write_gatt_char(self.write_uuid, chunk, response=response)
+            if self.session_logger is not None:
+                self.session_logger.tx(chunk, uuid=self.write_uuid)
             if self.inter_write_delay:
                 await asyncio.sleep(self.inter_write_delay)
+
+    async def write_many_packets(
+        self,
+        packets: Iterable[bytes | bytearray],
+        *,
+        response: bool = False,
+        inter_packet_delay: float = 0.0,
+        concatenate: bool = False,
+    ) -> None:
+        """Write several protocol packets, optionally concatenated experimentally."""
+
+        packet_list = [bytes(packet) for packet in packets]
+        if concatenate:
+            if packet_list:
+                await self.write(b"".join(packet_list), response=response)
+            return
+
+        for packet in packet_list:
+            await self.write(packet, response=response)
+            if inter_packet_delay:
+                await asyncio.sleep(inter_packet_delay)
 
     async def start_notifications(self, callback: NotificationCallback | None = None) -> None:
         if self.client is None or not self.client.is_connected:
@@ -143,6 +187,8 @@ class BleTransport:
 
         def _callback(_sender, data: bytearray) -> None:
             payload = bytes(data)
+            if self.session_logger is not None:
+                self.session_logger.rx(payload, uuid=self.notify_uuid)
             if self._notification_queue is not None:
                 self._notification_queue.put_nowait(payload)
             if self._user_notification_callback is not None:

@@ -64,7 +64,7 @@ async def _run_hardware_command(args: argparse.Namespace) -> None:
     if args.command == "image":
         _validate_file_arg(args.path, "image")
 
-    async with OpenIDotMatrix(address=args.address) as matrix:
+    async with OpenIDotMatrix(address=args.address, session_logger=args.session_log) as matrix:
         command = args.command
         if command == "status":
             result = {
@@ -209,6 +209,7 @@ def build_parser() -> argparse.ArgumentParser:
         description="Control and reverse-engineer iDotMatrix 32x32 BLE pixel displays.",
     )
     parser.add_argument("--address", help="BLE MAC/address. If omitted, hardware commands connect to first IDM-* device found.")
+    parser.add_argument("--session-log", help="Write TX/RX BLE events as JSONL to this path")
     sub = parser.add_subparsers(dest="command", required=True)
 
     p = sub.add_parser("scan", help="Scan for IDM-* BLE devices")

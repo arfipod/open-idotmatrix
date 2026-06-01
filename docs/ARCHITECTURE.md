@@ -3,7 +3,7 @@
 ## Layers
 
 ```text
-CLI / examples
+CLI / examples / frame renderer
     |
 OpenIDotMatrix       # high-level async API
     |
@@ -33,6 +33,10 @@ This makes it possible to:
 | `protocol.py` | packet building/parsing |
 | `text.py` | PIL -> 16x32 bitmaps |
 | `gif.py` | GIF/image -> 32x32 GIF -> chunks |
+| `framebuffer.py` | Bytearray-backed 32x32 RGB frames and frame diffing |
+| `renderer.py` | Chooses fill, pixel diff, or single-frame GIF update strategies |
+| `profile.py` | Per-device protocol and transport defaults discovered during hardware testing |
+| `session.py` | JSONL TX/RX logging for reverse-engineering sessions |
 | `transport.py` | BLE scan/connect/write/notify |
 | `device.py` | convenient async API |
 | `simulator.py` | local 32x32 view |

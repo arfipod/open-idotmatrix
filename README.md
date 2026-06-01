@@ -21,6 +21,10 @@ open-idotmatrix/
     protocol.py       # pure BLE packet builders/parsers
     text.py           # 16x32 text rendering with Pillow
     gif.py            # 32x32 GIF processing and chunking
+    framebuffer.py    # bytearray-backed 32x32 RGB frames
+    renderer.py       # frame diffing and render strategy selection
+    profile.py        # per-device behavior defaults
+    session.py        # JSONL TX/RX session logging
     transport.py      # BLE transport with bleak
     device.py         # high-level async API
     simulator.py      # 32x32 simulator with Pillow
@@ -138,6 +142,12 @@ If notification ACK handling fails during early GIF testing:
 open-idotmatrix --address AA:BB:CC:DD:EE:FF gif ./demo.gif --no-ack
 ```
 
+Record sent bytes and received notifications during hardware sessions:
+
+```bash
+open-idotmatrix --address AA:BB:CC:DD:EE:FF --session-log out/session.jsonl text "Hello"
+```
+
 ## Qt Application
 
 The PySide6 app exposes the same operation families as the CLI:
@@ -173,6 +183,24 @@ async def main():
         await m.pixel(31, 31, (0, 0, 255))
         await m.text("Hello", mode=TextMode.SCROLL_LEFT_TO_RIGHT, color=(255, 255, 255))
         await m.gif("demo.gif")
+
+asyncio.run(main())
+```
+
+For game-like or dashboard-style updates, draw into a framebuffer and let the renderer choose a safe update path:
+
+```python
+import asyncio
+from open_idotmatrix import MatrixFrame, MatrixRenderer, OpenIDotMatrix
+
+async def main():
+    async with OpenIDotMatrix(address="AA:BB:CC:DD:EE:FF") as device:
+        renderer = MatrixRenderer(device, max_pixel_updates=128)
+        frame = MatrixFrame()
+        frame[5, 5] = (0, 255, 0)
+        frame[6, 5] = (0, 255, 0)
+        frame[12, 10] = (255, 0, 0)
+        await renderer.show(frame)
 
 asyncio.run(main())
 ```

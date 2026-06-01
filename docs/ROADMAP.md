@@ -18,6 +18,9 @@ Create an open, testable, Linux-first library for controlling 32x32 iDotMatrix d
 - 16x32 text with Pillow.
 - GIF processing and 4096+16 chunking.
 - 32x32 simulator with Pillow.
+- Bytearray-backed `MatrixFrame`, `MatrixRenderer`, and `DeviceProfile`.
+- JSONL session logging for BLE TX/RX.
+- Fast-path multi-pixel writes through `pixels_fast()` and `write_many_packets()`.
 - Hardware-free unit tests.
 - Protocol, Linux BLE, simulator, reverse engineering, and Codex documentation.
 - GitHub Actions CI.

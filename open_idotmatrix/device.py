@@ -8,7 +8,9 @@ from datetime import datetime
 from pathlib import Path
 
 from .constants import ACK_CHUNK_OK, ACK_UPLOAD_DONE, WIDTH
-from .gif import gif_chunks_from_file, image_chunks_from_file
+from .framebuffer import MatrixFrame
+from .gif import gif_chunks_from_file, image_chunks_from_file, image_chunks_from_image
+from .profile import DeviceProfile
 from .protocol import (
     build_chronograph,
     build_clock_mode,
@@ -31,6 +33,7 @@ from .protocol import (
     generate_spiral_pixels,
     parse_packet,
 )
+from .session import SessionLogger
 from .text import render_text_bitmap_bytes
 from .transport import BleTransport, DiscoveredDevice
 from .types import (
@@ -47,8 +50,29 @@ from .types import (
 class OpenIDotMatrix:
     """Async high-level API for an iDotMatrix-compatible 32x32 display."""
 
-    def __init__(self, address: str | None = None, *, transport: BleTransport | None = None) -> None:
-        self.transport = transport or BleTransport(address=address)
+    def __init__(
+        self,
+        address: str | None = None,
+        *,
+        transport: BleTransport | None = None,
+        profile: DeviceProfile | None = None,
+        session_logger: SessionLogger | str | Path | None = None,
+    ) -> None:
+        profile = profile or DeviceProfile(address=address)
+        if address is not None and profile.address != address:
+            profile = profile.with_address(address)
+        self.profile = profile
+        if transport is None:
+            self.transport = BleTransport(
+                address=profile.address,
+                inter_write_delay=profile.inter_write_delay,
+                gatt_chunk_size=profile.gatt_chunk_size,
+                session_logger=session_logger,
+            )
+        else:
+            self.transport = transport
+            if session_logger is not None and hasattr(self.transport, "session_logger"):
+                self.transport.session_logger = BleTransport._coerce_session_logger(session_logger)
 
     @classmethod
     async def scan(cls, *, timeout: float = 5.0, name_prefix: str = "IDM-") -> list[DiscoveredDevice]:
@@ -67,9 +91,12 @@ class OpenIDotMatrix:
     async def __aexit__(self, exc_type, exc, tb) -> None:
         await self.disconnect()
 
-    async def send(self, packet: bytes | bytearray, *, response: bool = False) -> dict:
+    def _response(self, response: bool | None) -> bool:
+        return self.profile.write_response if response is None else response
+
+    async def send(self, packet: bytes | bytearray, *, response: bool | None = None) -> dict:
         packet = bytes(packet)
-        await self.transport.write(packet, response=response)
+        await self.transport.write(packet, response=self._response(response))
         return parse_packet(packet)
 
     async def on(self) -> dict:
@@ -98,8 +125,9 @@ class OpenIDotMatrix:
         self,
         dt: datetime | None = None,
         *,
-        year_mode: YearByteMode = YearByteMode.LOW_BYTE,
+        year_mode: YearByteMode | str | None = None,
     ) -> dict:
+        year_mode = self.profile.year_byte_mode if year_mode is None else YearByteMode(year_mode)
         return await self.send(build_set_time(dt, year_mode=year_mode))
 
     async def fill(self, color: Color | Sequence[int]) -> dict:
@@ -109,12 +137,34 @@ class OpenIDotMatrix:
         return await self.send(build_pixel(x, y, color))
 
     async def pixels(self, pixels: Iterable[Pixel], *, delay: float = 0.0) -> list[dict]:
-        results = []
-        for pixel in pixels:
-            results.append(await self.pixel(pixel.x, pixel.y, pixel.color))
-            if delay:
-                await asyncio.sleep(delay)
-        return results
+        return await self.pixels_fast(pixels, inter_packet_delay=delay, parse=True)
+
+    async def pixels_fast(
+        self,
+        pixels: Iterable[Pixel],
+        *,
+        response: bool | None = None,
+        inter_packet_delay: float = 0.0,
+        parse: bool = False,
+    ) -> list[dict]:
+        """Send many single-pixel packets through the transport fast path."""
+
+        packets = [build_pixel(pixel.x, pixel.y, pixel.color) for pixel in pixels]
+        if hasattr(self.transport, "write_many_packets"):
+            await self.transport.write_many_packets(
+                packets,
+                response=self._response(response),
+                inter_packet_delay=inter_packet_delay,
+                concatenate=self.profile.pixel_batch_mode == "concatenate",
+            )
+        else:
+            for packet in packets:
+                await self.transport.write(packet, response=self._response(response))
+                if inter_packet_delay:
+                    await asyncio.sleep(inter_packet_delay)
+        if not parse:
+            return []
+        return [parse_packet(packet) for packet in packets]
 
     async def spiral(self, color: Color | Sequence[int] = (255, 0, 0), *, delay: float = 0.0) -> list[dict]:
         return await self.pixels(generate_spiral_pixels(color=color), delay=delay)
@@ -144,18 +194,15 @@ class OpenIDotMatrix:
         )
         return await self.send(packet)
 
-    async def gif(
+    async def _send_upload_chunks(
         self,
-        path: str | Path,
+        chunks,
         *,
-        process: bool = True,
-        total_length_mode: GifTotalLengthMode = GifTotalLengthMode.INCLUDE_HEADERS,
-        wait_for_ack: bool = True,
-        response: bool = True,
-        ack_timeout: float = 10.0,
-        sleep_between_chunks: float = 1.0,
+        wait_for_ack: bool,
+        response: bool,
+        ack_timeout: float,
+        sleep_between_chunks: float,
     ) -> list[dict]:
-        chunks = gif_chunks_from_file(path, process=process, pixel_size=WIDTH, total_length_mode=total_length_mode)
         if wait_for_ack:
             await self.transport.start_notifications()
         results = []
@@ -169,29 +216,71 @@ class OpenIDotMatrix:
                 await asyncio.sleep(sleep_between_chunks)
         return results
 
-    async def image(
+    async def gif(
         self,
         path: str | Path,
         *,
-        total_length_mode: GifTotalLengthMode = GifTotalLengthMode.INCLUDE_HEADERS,
-        wait_for_ack: bool = True,
+        process: bool = True,
+        total_length_mode: GifTotalLengthMode | str | None = None,
+        wait_for_ack: bool | None = None,
         response: bool = True,
         ack_timeout: float = 10.0,
         sleep_between_chunks: float = 1.0,
     ) -> list[dict]:
+        total_length_mode = self.profile.gif_total_length_mode if total_length_mode is None else total_length_mode
+        wait_for_ack = self.profile.gif_wait_for_ack if wait_for_ack is None else wait_for_ack
+        chunks = gif_chunks_from_file(path, process=process, pixel_size=WIDTH, total_length_mode=total_length_mode)
+        return await self._send_upload_chunks(
+            chunks,
+            wait_for_ack=wait_for_ack,
+            response=response,
+            ack_timeout=ack_timeout,
+            sleep_between_chunks=sleep_between_chunks,
+        )
+
+    async def image(
+        self,
+        path: str | Path,
+        *,
+        total_length_mode: GifTotalLengthMode | str | None = None,
+        wait_for_ack: bool | None = None,
+        response: bool = True,
+        ack_timeout: float = 10.0,
+        sleep_between_chunks: float = 1.0,
+    ) -> list[dict]:
+        total_length_mode = self.profile.gif_total_length_mode if total_length_mode is None else total_length_mode
+        wait_for_ack = self.profile.gif_wait_for_ack if wait_for_ack is None else wait_for_ack
         chunks = image_chunks_from_file(path, pixel_size=WIDTH, total_length_mode=total_length_mode)
-        if wait_for_ack:
-            await self.transport.start_notifications()
-        results = []
-        for index, chunk in enumerate(chunks):
-            await self.transport.write(chunk.data, response=response)
-            results.append(parse_packet(chunk.data))
-            if wait_for_ack:
-                expected = expected_gif_ack_for_chunk(index, len(chunks))
-                await self.transport.wait_for_notification(expected, timeout=ack_timeout)
-            elif sleep_between_chunks:
-                await asyncio.sleep(sleep_between_chunks)
-        return results
+        return await self._send_upload_chunks(
+            chunks,
+            wait_for_ack=wait_for_ack,
+            response=response,
+            ack_timeout=ack_timeout,
+            sleep_between_chunks=sleep_between_chunks,
+        )
+
+    async def frame(
+        self,
+        frame: MatrixFrame,
+        *,
+        total_length_mode: GifTotalLengthMode | str | None = None,
+        wait_for_ack: bool | None = None,
+        response: bool = True,
+        ack_timeout: float = 10.0,
+        sleep_between_chunks: float = 1.0,
+    ) -> list[dict]:
+        """Upload a MatrixFrame as a single-frame GIF."""
+
+        total_length_mode = self.profile.gif_total_length_mode if total_length_mode is None else total_length_mode
+        wait_for_ack = self.profile.gif_wait_for_ack if wait_for_ack is None else wait_for_ack
+        chunks = image_chunks_from_image(frame.to_image(), pixel_size=WIDTH, total_length_mode=total_length_mode)
+        return await self._send_upload_chunks(
+            chunks,
+            wait_for_ack=wait_for_ack,
+            response=response,
+            ack_timeout=ack_timeout,
+            sleep_between_chunks=sleep_between_chunks,
+        )
 
     async def clock(
         self,

@@ -9,6 +9,8 @@ from .exceptions import (
     ProtocolError,
     TransportError,
 )
+from .framebuffer import MatrixFrame
+from .profile import DeviceProfile
 from .protocol import (
     build_fullscreen_color,
     build_gif_chunks,
@@ -20,6 +22,8 @@ from .protocol import (
     build_text_packet,
     parse_packet,
 )
+from .renderer import MatrixRenderer
+from .session import SessionLogger
 from .simulator import MatrixSimulator
 from .types import (
     Color,
@@ -41,6 +45,9 @@ __all__ = [
     "DeviceNotFoundError",
     "GifTotalLengthMode",
     "HEIGHT",
+    "DeviceProfile",
+    "MatrixFrame",
+    "MatrixRenderer",
     "MatrixSimulator",
     "NOTIFY_UUID",
     "OpenIDotMatrix",
@@ -49,6 +56,7 @@ __all__ = [
     "Point",
     "ProtocolError",
     "SERVICE_UUID",
+    "SessionLogger",
     "TextBackgroundMode",
     "TextColorMode",
     "TextMode",

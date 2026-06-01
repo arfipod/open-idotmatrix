@@ -43,7 +43,7 @@ expected visual result, observed visual result, and proposed changes.
 
 ### Task 1 - BLE Session Logging
 
-Add a CLI option:
+Implemented as a CLI option:
 
 ```bash
 open-idotmatrix --address ... --session-log out/session.jsonl text "Hello"

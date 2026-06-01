@@ -15,6 +15,7 @@ from PIL import Image, ImageDraw
 
 from .constants import HEIGHT, WIDTH
 from .exceptions import ProtocolError
+from .framebuffer import MatrixFrame
 from .gif import first_frame_image, frame_images
 from .protocol import inspect_text_packet, parse_packet
 from .text import render_text_bitmap_bytes, render_text_preview_image, split_text_bitmap_bytes
@@ -56,6 +57,14 @@ class MatrixSimulator:
         for y in range(self.height):
             for x in range(self.width):
                 self.pixels[y][x] = image.getpixel((x, y))
+
+    def from_frame(self, frame: MatrixFrame) -> None:
+        if frame.width != self.width or frame.height != self.height:
+            raise ProtocolError("frame dimensions do not match simulator dimensions")
+        self.from_image(frame.to_image())
+
+    def to_frame(self) -> MatrixFrame:
+        return MatrixFrame.from_image(self.to_image())
 
     def to_image(self, *, scale: int = 1, grid: bool = False) -> Image.Image:
         image = Image.new("RGB", (self.width, self.height), _BLACK)

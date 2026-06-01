@@ -76,6 +76,10 @@ sim = MatrixSimulator()
 sim.apply_packet(build_fullscreen_color((0, 0, 0)))
 sim.apply_packet(build_pixel(31, 31, (255, 0, 0)))
 sim.save("out/test.png")
+
+frame = sim.to_frame()
+frame[0, 0] = (0, 255, 0)
+sim.from_frame(frame)
 ```
 
 Text:

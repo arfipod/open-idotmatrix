@@ -48,8 +48,21 @@ def process_image_bytes(path: str | Path, *, pixel_size: int = WIDTH) -> bytes:
     """Convert any Pillow-supported image into a single-frame 32x32 GIF."""
 
     image = matrix_image_from_file(path, pixel_size=pixel_size)
+    return process_image_object_bytes(image, pixel_size=pixel_size)
+
+
+def process_image_object_bytes(image: Image.Image, *, pixel_size: int = WIDTH) -> bytes:
+    """Convert a Pillow image into a single-frame pixel_size x pixel_size GIF."""
+
+    if pixel_size <= 0:
+        raise ProtocolError("pixel_size must be positive")
+    frame = image.convert("RGBA")
+    if frame.size != (pixel_size, pixel_size):
+        frame = frame.resize((pixel_size, pixel_size), Image.Resampling.NEAREST)
+    background = Image.new("RGBA", frame.size, (0, 0, 0, 255))
+    background.alpha_composite(frame)
     buffer = io.BytesIO()
-    image.convert("P", palette=Image.Palette.ADAPTIVE).save(buffer, format="GIF")
+    background.convert("RGB").convert("P", palette=Image.Palette.ADAPTIVE).save(buffer, format="GIF")
     return buffer.getvalue()
 
 
@@ -144,6 +157,18 @@ def image_chunks_from_file(
     """Convert any image to a 32x32 single-frame GIF and return upload chunks."""
 
     gif_bytes = process_image_bytes(path, pixel_size=pixel_size)
+    return build_gif_chunks(gif_bytes, total_length_mode=total_length_mode)
+
+
+def image_chunks_from_image(
+    image: Image.Image,
+    *,
+    pixel_size: int = WIDTH,
+    total_length_mode: GifTotalLengthMode = GifTotalLengthMode.INCLUDE_HEADERS,
+) -> list[GifChunk]:
+    """Convert a Pillow image to a single-frame GIF and return upload chunks."""
+
+    gif_bytes = process_image_object_bytes(image, pixel_size=pixel_size)
     return build_gif_chunks(gif_bytes, total_length_mode=total_length_mode)
 
 
