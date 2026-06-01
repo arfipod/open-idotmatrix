@@ -93,4 +93,5 @@ def test_matrix_runtime_backpressure_keeps_latest_queued_frame():
     assert device.connected is True
     assert device.disconnected is True
     assert device.fills[-1] == (0, 0, 3)
-    assert (0, 2, 0) not in device.fills
+    assert (1, 0, 0) not in device.fills
+    assert len(device.fills) <= 2

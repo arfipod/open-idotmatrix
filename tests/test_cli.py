@@ -29,3 +29,28 @@ def test_smoke_test_parser_has_safe_defaults():
     assert args.out == "out/check.json"
     assert args.skip_gif is True
     assert args.no_ack is False
+
+
+def test_life_parser_supports_hardware_and_preview_options():
+    parser = build_parser()
+    args = parser.parse_args(
+        [
+            "--address",
+            "AA:BB",
+            "life",
+            "--seed",
+            "glider",
+            "--generations",
+            "42",
+            "--fps",
+            "20",
+            "--simulate",
+            "out/life.gif",
+        ]
+    )
+
+    assert args.command == "life"
+    assert args.seed == "glider"
+    assert args.generations == 42
+    assert args.fps == 20
+    assert args.simulate == "out/life.gif"

@@ -8,8 +8,9 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from PySide6.QtCore import QProcess, Qt
-from PySide6.QtGui import QPixmap
+from PIL import Image
+from PySide6.QtCore import QProcess, Qt, QTimer
+from PySide6.QtGui import QImage, QPixmap
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -32,8 +33,11 @@ from PySide6.QtWidgets import (
 )
 
 from .exceptions import OpenIDotMatrixError, ProtocolError
+from .game_of_life import GameOfLife, render_life_preview
 from .gif import save_matrix_image_preview
+from .playable_games import MatrixGame, available_game_names, create_game
 from .protocol import parse_packet
+from .runtime import MatrixRuntime
 from .simulator import (
     MatrixSimulator,
     save_gif_preview_frames,
@@ -68,7 +72,12 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("open-idotmatrix")
         self.resize(1120, 820)
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self._processes: list[QProcess] = []
+        self._game: MatrixGame | None = None
+        self._game_runtime: MatrixRuntime | None = None
+        self._game_timer = QTimer(self)
+        self._game_timer.timeout.connect(self._game_tick)
         self.preview_label = QLabel()
         self.preview_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.preview_label.setMinimumSize(260, 260)
@@ -89,6 +98,8 @@ class MainWindow(QMainWindow):
         tabs.addTab(self._text_gif_tab(), "Text & GIF")
         tabs.addTab(self._modes_tab(), "Modes")
         tabs.addTab(self._tools_tab(), "Tools")
+        tabs.addTab(self._games_tab(), "Games")
+        tabs.addTab(self._demos_tab(), "Demos")
         tabs.addTab(self._danger_tab(), "Danger")
         root_layout.addWidget(tabs, stretch=1)
 
@@ -555,6 +566,85 @@ class MainWindow(QMainWindow):
         layout.addWidget(sim_save_browse, 8, 4)
         return tab
 
+    def _demos_tab(self) -> QWidget:
+        tab = QWidget()
+        layout = QGridLayout(tab)
+
+        self.life_seed = QComboBox()
+        for name in GameOfLife.pattern_names():
+            self.life_seed.addItem(name, name)
+        self.life_random_seed = QSpinBox()
+        self.life_random_seed.setRange(-1, 2_147_483_647)
+        self.life_random_seed.setValue(-1)
+        self.life_generations = self._spin(0, 10000, 200)
+        self.life_fps = self._float_spin(0.1, 60.0, 12.0, 1.0)
+        self.life_density = self._float_spin(0.0, 1.0, 0.28, 0.01, decimals=2)
+        self.life_wrap = QCheckBox("Wrap edges")
+        self.life_wrap.setChecked(True)
+        life_alive_rgb, self.life_alive_rgb = self._rgb_editor((0, 255, 80))
+        life_dead_rgb, self.life_dead_rgb = self._rgb_editor((0, 0, 0))
+        self.life_preview_path = QLineEdit("out/life.gif")
+        life_preview_browse = QPushButton("Browse")
+        life_preview_browse.clicked.connect(lambda: self._browse_save(self.life_preview_path, "Save Life Preview"))
+        run_life = QPushButton("Run on Matrix")
+        run_life.clicked.connect(self.run_life)
+        preview_life = QPushButton("Preview GIF")
+        preview_life.clicked.connect(self.preview_life)
+
+        layout.addWidget(QLabel("Conway Life"), 0, 0)
+        layout.addWidget(QLabel("Seed"), 1, 0)
+        layout.addWidget(self.life_seed, 1, 1)
+        layout.addWidget(QLabel("Random Seed"), 1, 2)
+        layout.addWidget(self.life_random_seed, 1, 3)
+        layout.addWidget(QLabel("Generations"), 2, 0)
+        layout.addWidget(self.life_generations, 2, 1)
+        layout.addWidget(QLabel("FPS"), 2, 2)
+        layout.addWidget(self.life_fps, 2, 3)
+        layout.addWidget(QLabel("Density"), 3, 0)
+        layout.addWidget(self.life_density, 3, 1)
+        layout.addWidget(self.life_wrap, 3, 2)
+        layout.addWidget(QLabel("Alive RGB"), 4, 0)
+        layout.addWidget(life_alive_rgb, 4, 1)
+        layout.addWidget(QLabel("Dead RGB"), 5, 0)
+        layout.addWidget(life_dead_rgb, 5, 1)
+        layout.addWidget(QLabel("Preview"), 6, 0)
+        layout.addWidget(self.life_preview_path, 6, 1, 1, 2)
+        layout.addWidget(life_preview_browse, 6, 3)
+        layout.addWidget(run_life, 7, 0)
+        layout.addWidget(preview_life, 7, 1)
+        layout.setColumnStretch(4, 1)
+        return tab
+
+    def _games_tab(self) -> QWidget:
+        tab = QWidget()
+        layout = QGridLayout(tab)
+
+        self.game_name = QComboBox()
+        for name in available_game_names():
+            self.game_name.addItem(name.replace("_", " ").title(), name)
+        self.game_fps = self._float_spin(1.0, 30.0, 12.0, 1.0)
+        self.game_preview_only = QCheckBox("Preview only")
+        self.game_preview_only.setChecked(False)
+        self.game_seed = QSpinBox()
+        self.game_seed.setRange(-1, 2_147_483_647)
+        self.game_seed.setValue(-1)
+        start_game = QPushButton("Start")
+        start_game.clicked.connect(self.start_game)
+        stop_game = QPushButton("Stop")
+        stop_game.clicked.connect(self.stop_game)
+
+        layout.addWidget(QLabel("Game"), 0, 0)
+        layout.addWidget(self.game_name, 0, 1)
+        layout.addWidget(QLabel("FPS"), 0, 2)
+        layout.addWidget(self.game_fps, 0, 3)
+        layout.addWidget(QLabel("Seed"), 1, 0)
+        layout.addWidget(self.game_seed, 1, 1)
+        layout.addWidget(self.game_preview_only, 1, 2)
+        layout.addWidget(start_game, 2, 0)
+        layout.addWidget(stop_game, 2, 1)
+        layout.setColumnStretch(4, 1)
+        return tab
+
     def _danger_tab(self) -> QWidget:
         tab = QWidget()
         layout = QGridLayout(tab)
@@ -691,6 +781,107 @@ class MainWindow(QMainWindow):
             ],
         )
 
+    def run_life(self) -> None:
+        self._run_device("life", ["life", *self._life_args()])
+
+    def start_game(self) -> None:
+        self.stop_game()
+        seed = None if self.game_seed.value() < 0 else self.game_seed.value()
+        try:
+            self._game = create_game(self._combo_value(self.game_name), seed=seed)
+            if not self.game_preview_only.isChecked():
+                address = self.address_edit.text().strip() or None
+                self._game_runtime = MatrixRuntime(
+                    address=address,
+                    renderer_kwargs={"strategy": "pixels"},
+                    clear_first=(0, 0, 0),
+                )
+                self._game_runtime.start(timeout=10.0)
+        except Exception as exc:
+            self._game = None
+            self._game_runtime = None
+            self._append_error("game", exc)
+            self._set_status("Game error")
+            return
+        interval = max(1, int(1000 / self.game_fps.value()))
+        self._game_timer.start(interval)
+        self._set_status(f"Game running: {self._combo_value(self.game_name)}")
+        self.setFocus(Qt.FocusReason.OtherFocusReason)
+
+    def stop_game(self) -> None:
+        self._game_timer.stop()
+        if self._game_runtime is not None:
+            try:
+                self._game_runtime.close(timeout=3.0)
+            except Exception as exc:
+                self._append_error("game stop", exc)
+        self._game_runtime = None
+        self._game = None
+
+    def _game_tick(self) -> None:
+        if self._game is None:
+            return
+        frame = self._game.tick()
+        self._show_frame_preview(frame)
+        if self._game_runtime is not None:
+            self._game_runtime.submit_frame(frame)
+
+    def preview_life(self) -> None:
+        try:
+            path = render_life_preview(
+                self.life_preview_path.text().strip(),
+                seed=self._combo_value(self.life_seed),
+                generations=max(1, self.life_generations.value()),
+                fps=self.life_fps.value(),
+                density=self.life_density.value(),
+                random_seed=self._life_random_seed(),
+                wrap=self.life_wrap.isChecked(),
+                alive_color=self._rgb(self.life_alive_rgb),
+                dead_color=self._rgb(self.life_dead_rgb),
+            )
+        except Exception as exc:
+            self._append_error("life preview", exc)
+            return
+        self._append_result("life preview", {"path": str(path)})
+        self._show_preview(path)
+
+    def keyPressEvent(self, event) -> None:  # noqa: N802 - Qt API
+        if self._game is None:
+            super().keyPressEvent(event)
+            return
+        action = self._game_action_for_key(event.key())
+        if action is None:
+            super().keyPressEvent(event)
+            return
+        self._game.control(action)
+        event.accept()
+
+    def closeEvent(self, event) -> None:  # noqa: N802 - Qt API
+        self.stop_game()
+        super().closeEvent(event)
+
+    def _game_action_for_key(self, key: int) -> str | None:
+        if key == Qt.Key.Key_Left:
+            return "left"
+        if key == Qt.Key.Key_Right:
+            return "right"
+        if key == Qt.Key.Key_Down:
+            return "down"
+        if key in (Qt.Key.Key_R,):
+            return "reset"
+        if key in (Qt.Key.Key_Up, Qt.Key.Key_Z, Qt.Key.Key_X):
+            return "flap" if self._game is not None and self._game.name == "flappy" else "rotate"
+        if key == Qt.Key.Key_Space:
+            if self._game is None:
+                return None
+            if self._game.name == "flappy":
+                return "flap"
+            if self._game.name == "tetris":
+                return "drop"
+            if self._game.name == "space_invaders":
+                return "fire"
+        return None
+
     def delete_device_data(self) -> None:
         if not self.delete_confirm.isChecked():
             QMessageBox.warning(self, "Confirmation Required", "Enable the confirmation checkbox first.")
@@ -803,6 +994,32 @@ class MainWindow(QMainWindow):
         if no_response:
             args.append("--no-response")
         return args
+
+    def _life_args(self) -> list[str]:
+        args = [
+            "--seed",
+            self._combo_value(self.life_seed),
+            "--density",
+            str(self.life_density.value()),
+            "--generations",
+            str(self.life_generations.value()),
+            "--fps",
+            str(self.life_fps.value()),
+            "--alive-rgb",
+            *self._rgb_args(self.life_alive_rgb),
+            "--dead-rgb",
+            *self._rgb_args(self.life_dead_rgb),
+        ]
+        random_seed = self._life_random_seed()
+        if random_seed is not None:
+            args.extend(["--random-seed", str(random_seed)])
+        if not self.life_wrap.isChecked():
+            args.append("--no-wrap")
+        return args
+
+    def _life_random_seed(self) -> int | None:
+        value = self.life_random_seed.value()
+        return None if value < 0 else value
 
     def _rgb_args(self, spins: tuple[QSpinBox, QSpinBox, QSpinBox]) -> list[str]:
         return [str(value) for value in self._rgb(spins)]
@@ -934,6 +1151,18 @@ class MainWindow(QMainWindow):
         pixmap = QPixmap(str(path))
         if pixmap.isNull():
             return
+        scaled = pixmap.scaled(
+            self.preview_label.size(),
+            Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.FastTransformation,
+        )
+        self.preview_label.setPixmap(scaled)
+
+    def _show_frame_preview(self, frame) -> None:
+        image = frame.to_image().resize((256, 256), Image.Resampling.NEAREST)
+        data = image.tobytes()
+        qimage = QImage(data, image.width, image.height, image.width * 3, QImage.Format.Format_RGB888).copy()
+        pixmap = QPixmap.fromImage(qimage)
         scaled = pixmap.scaled(
             self.preview_label.size(),
             Qt.AspectRatioMode.KeepAspectRatio,

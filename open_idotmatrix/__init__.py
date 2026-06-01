@@ -10,7 +10,16 @@ from .exceptions import (
     TransportError,
 )
 from .framebuffer import MatrixFrame
+from .game_of_life import GameOfLife, LifeStats, render_life_preview, run_life_hardware
 from .outputs import FrameOutput, HardwareOutput, SimulatorOutput, TeeOutput
+from .playable_games import (
+    FlappyBirdGame,
+    MatrixGame,
+    SpaceInvadersGame,
+    TetrisGame,
+    available_game_names,
+    create_game,
+)
 from .profile import DeviceProfile
 from .protocol import (
     build_fullscreen_color,
@@ -51,13 +60,17 @@ __all__ = [
     "FakeTransport",
     "FakeWrite",
     "FrameOutput",
+    "FlappyBirdGame",
+    "GameOfLife",
     "GifAckPolicy",
     "GifTotalLengthMode",
     "HEIGHT",
     "MatrixFrame",
+    "MatrixGame",
     "MatrixRenderer",
     "MatrixRuntime",
     "MatrixSimulator",
+    "LifeStats",
     "NOTIFY_UUID",
     "OpenIDotMatrix",
     "OpenIDotMatrixError",
@@ -66,8 +79,10 @@ __all__ = [
     "ProtocolError",
     "SERVICE_UUID",
     "SessionLogger",
+    "SpaceInvadersGame",
     "HardwareOutput",
     "SimulatorOutput",
+    "TetrisGame",
     "TeeOutput",
     "TextBackgroundMode",
     "TextColorMode",
@@ -76,6 +91,7 @@ __all__ = [
     "WIDTH",
     "WRITE_UUID",
     "YearByteMode",
+    "available_game_names",
     "build_fullscreen_color",
     "build_gif_chunks",
     "build_pixel",
@@ -84,5 +100,8 @@ __all__ = [
     "build_set_brightness",
     "build_set_time",
     "build_text_packet",
+    "create_game",
     "parse_packet",
+    "render_life_preview",
+    "run_life_hardware",
 ]

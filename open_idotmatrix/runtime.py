@@ -13,6 +13,7 @@ from .profile import DeviceProfile
 from .renderer import MatrixRenderer
 from .session import SessionLogger
 from .transport import BleTransport
+from .types import Color, RGBTuple
 
 
 class MatrixRuntime:
@@ -32,6 +33,7 @@ class MatrixRuntime:
         profile: DeviceProfile | None = None,
         session_logger: SessionLogger | str | Path | None = None,
         renderer_kwargs: dict[str, Any] | None = None,
+        clear_first: Color | RGBTuple | None = None,
     ) -> None:
         self.address = address
         self.device = device
@@ -39,6 +41,7 @@ class MatrixRuntime:
         self.profile = profile
         self.session_logger = session_logger
         self.renderer_kwargs = renderer_kwargs or {}
+        self.clear_first = clear_first
 
         self._thread: threading.Thread | None = None
         self._loop: asyncio.AbstractEventLoop | None = None
@@ -122,6 +125,9 @@ class MatrixRuntime:
         renderer = MatrixRenderer(device, **self.renderer_kwargs)
         try:
             await device.connect()
+            if self.clear_first is not None:
+                await device.fill(self.clear_first)
+                renderer.previous_frame = MatrixFrame(fill=self.clear_first)
         except BaseException as exc:
             self._startup_error = exc
             self._connected.set()

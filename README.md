@@ -25,6 +25,7 @@ open-idotmatrix/
     gif.py            # 32x32 GIF processing and chunking
     framebuffer.py    # bytearray-backed 32x32 RGB frames
     renderer.py       # frame diffing and render strategy selection
+    game_of_life.py   # Conway's Game of Life demo
     profile.py        # per-device behavior defaults
     session.py        # JSONL TX/RX session logging
     transport.py      # BLE transport with bleak
@@ -231,6 +232,20 @@ matrix = OpenIDotMatrix(transport=transport)
 ```
 
 More app and game patterns are in [`docs/APPLICATIONS.md`](docs/APPLICATIONS.md).
+
+Run the Conway Game of Life demo on hardware, computed locally and streamed as pixel diffs:
+
+```bash
+open-idotmatrix --address AA:BB:CC:DD:EE:FF life --seed random --generations 200 --fps 12
+```
+
+Or preview it without hardware:
+
+```bash
+open-idotmatrix life --seed glider --generations 120 --simulate out/life.gif
+```
+
+The Qt app also includes playable 32x32 games: Flappy Bird, Tetris, and Space Invaders. They run on the computer, render to the matrix, and use the computer keyboard for input.
 
 ## Known Protocol Summary
 

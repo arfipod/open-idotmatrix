@@ -29,6 +29,8 @@ Create an open, testable, Linux-first library for controlling 32x32 iDotMatrix d
 - Synchronous `MatrixRuntime` for Pygame-style loops with latest-frame backpressure.
 - Simulator, hardware, and tee frame outputs for app preview plus device rendering.
 - Application/game documentation that keeps per-frame work inside the library API instead of CLI subprocesses.
+- Conway Game of Life demo computed locally and streamed as sparse pixel diffs from CLI and Qt.
+- Qt playable games: Flappy Bird, Tetris, and Space Invaders with keyboard input and matrix rendering.
 - Hardware-free unit tests.
 - Protocol, Linux BLE, simulator, reverse engineering, and Codex documentation.
 - GitHub Actions CI.

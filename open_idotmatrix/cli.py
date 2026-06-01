@@ -14,6 +14,7 @@ from .constants import DEVICE_NAME_PREFIX
 from .device import OpenIDotMatrix
 from .exceptions import OpenIDotMatrixError, ProtocolError
 from .framebuffer import MatrixFrame
+from .game_of_life import GameOfLife, render_life_preview, run_life_hardware
 from .profile import DeviceProfile
 from .protocol import parse_packet
 from .simulator import (
@@ -214,6 +215,51 @@ def _cmd_simulate(args: argparse.Namespace) -> None:
 def _cmd_gif_preview(args: argparse.Namespace) -> None:
     paths = save_gif_preview_frames(args.path, args.out_dir, scale=args.scale, max_frames=args.max_frames)
     _json([str(path) for path in paths])
+
+
+async def _cmd_life(args: argparse.Namespace) -> None:
+    alive_color = _rgb(args.alive_rgb)
+    dead_color = _rgb(args.dead_rgb)
+    if args.simulate:
+        path = render_life_preview(
+            args.simulate,
+            seed=args.seed,
+            generations=args.generations if args.generations > 0 else 120,
+            fps=args.fps,
+            density=args.density,
+            random_seed=args.random_seed,
+            wrap=not args.no_wrap,
+            alive_color=alive_color,
+            dead_color=dead_color,
+            scale=args.scale,
+        )
+        _json({"mode": "simulate", "path": str(path)})
+        return
+
+    profile = DeviceProfile(address=args.address, gatt_chunk_size=args.gatt_chunk_size)
+    async with OpenIDotMatrix(profile=profile, session_logger=args.session_log) as matrix:
+        stats = await run_life_hardware(
+            matrix,
+            seed=args.seed,
+            generations=args.generations,
+            fps=args.fps,
+            density=args.density,
+            random_seed=args.random_seed,
+            wrap=not args.no_wrap,
+            alive_color=alive_color,
+            dead_color=dead_color,
+            clear_first=not args.no_clear,
+        )
+        _json(
+            {
+                "mode": "hardware",
+                "address": matrix.transport.address,
+                "generations": stats.generations,
+                "alive": stats.alive,
+                "elapsed_seconds": round(stats.elapsed_seconds, 3),
+                "frames_per_second": round(stats.frames_per_second, 3),
+            }
+        )
 
 
 def _result_hexes(result: Any) -> list[str]:
@@ -527,6 +573,20 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--scale", type=int, default=16)
     p.add_argument("--max-frames", type=int, default=16)
     p.set_defaults(func=_cmd_gif_preview)
+
+    p = sub.add_parser("life", help="Run Conway's Game of Life locally and render it to hardware or preview GIF")
+    p.add_argument("--seed", choices=GameOfLife.pattern_names(), default="random")
+    p.add_argument("--random-seed", type=int)
+    p.add_argument("--density", type=float, default=0.28)
+    p.add_argument("--generations", type=int, default=200, help="0 means run until interrupted in hardware mode")
+    p.add_argument("--fps", type=float, default=12.0)
+    p.add_argument("--alive-rgb", nargs=3, default=["0", "255", "80"], metavar=("R", "G", "B"))
+    p.add_argument("--dead-rgb", nargs=3, default=["0", "0", "0"], metavar=("R", "G", "B"))
+    p.add_argument("--no-wrap", action="store_true", help="Disable toroidal edges")
+    p.add_argument("--no-clear", action="store_true", help="Do not clear the matrix before the first generation")
+    p.add_argument("--simulate", help="Save a preview GIF instead of connecting to hardware")
+    p.add_argument("--scale", type=int, default=16, help="Preview GIF pixel scale")
+    p.set_defaults(func=_cmd_life)
 
     p = sub.add_parser("smoke-test", help="Run safe hardware smoke tests and write a JSON checklist")
     p.add_argument("--out", default="out/smoke.json")

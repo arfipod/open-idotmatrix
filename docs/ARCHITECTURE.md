@@ -37,6 +37,8 @@ This makes it possible to:
 | `renderer.py` | Chooses fill, pixel diff, or single-frame GIF update strategies |
 | `runtime.py` | Synchronous background-thread runtime for game loops |
 | `outputs.py` | Simulator, hardware, and tee outputs for frame rendering |
+| `game_of_life.py` | Conway's Game of Life demo computed locally and rendered as frame diffs |
+| `playable_games.py` | Small 32x32 game engines used by the Qt Games tab |
 | `profile.py` | Per-device protocol and transport defaults discovered during hardware testing |
 | `session.py` | JSONL TX/RX logging for reverse-engineering sessions |
 | `testing.py` | Fake in-memory transport for app and API tests without hardware |

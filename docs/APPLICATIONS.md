@@ -94,3 +94,41 @@ from open_idotmatrix import FakeTransport, MatrixFrame, OpenIDotMatrix
 transport = FakeTransport()
 matrix = OpenIDotMatrix(transport=transport)
 ```
+
+## Demo: Conway's Game Of Life
+
+The package includes a local Game of Life demo that computes every generation on
+the host computer and only sends frame diffs to the matrix. It keeps one BLE
+connection open and clears the display once before streaming live cells, which
+keeps startup and per-generation traffic low.
+
+Hardware:
+
+```bash
+open-idotmatrix --address AA:BB:CC:DD:EE:FF life --seed random --generations 200 --fps 12
+```
+
+Preview without hardware:
+
+```bash
+open-idotmatrix life --seed glider --generations 120 --simulate out/life.gif
+```
+
+The Qt app exposes the same demo in the Demos tab.
+
+## Playable Qt Games
+
+The Qt app also has a Games tab with three live games rendered on the matrix:
+
+- Flappy Bird;
+- Tetris;
+- Space Invaders.
+
+The game loop runs on the computer, keyboard input updates the game state, and
+only the resulting 32x32 frames are sent to the matrix through `MatrixRuntime`.
+Use the keyboard while the game is running:
+
+- arrows: movement;
+- space: flap, drop, or fire depending on the game;
+- up/Z/X: rotate in Tetris;
+- R: reset.
