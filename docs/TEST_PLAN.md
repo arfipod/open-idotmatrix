@@ -22,6 +22,14 @@ Covers:
 
 Use a powered-on 32x32 iDotMatrix close to the PC.
 
+Automated safe checklist:
+
+```bash
+open-idotmatrix --address AA:BB:CC:DD:EE:FF --session-log out/smoke.jsonl smoke-test --out out/smoke.json
+```
+
+The JSON report marks display-dependent checks as `needs_user_confirmation` so the observed result can be filled into the hardware report.
+
 ### 1. Scan
 
 ```bash

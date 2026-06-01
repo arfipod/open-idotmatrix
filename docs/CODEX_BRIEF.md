@@ -58,7 +58,7 @@ Each JSONL line should contain:
 
 ### Task 2 - Automated Smoke Test
 
-Create a command:
+Implemented as:
 
 ```bash
 open-idotmatrix --address ... smoke-test --out out/smoke.json
@@ -84,7 +84,7 @@ Record which combination works with:
 
 ### Task 4 - MTU / Write Splitting
 
-Inspect whether `max_write_without_response_size` works reliably on BlueZ. If not, add options:
+Inspect whether `max_write_without_response_size` works reliably on BlueZ. The CLI now supports:
 
 ```bash
 --gatt-chunk-size 20

@@ -10,6 +10,7 @@ from .exceptions import (
     TransportError,
 )
 from .framebuffer import MatrixFrame
+from .outputs import FrameOutput, HardwareOutput, SimulatorOutput, TeeOutput
 from .profile import DeviceProfile
 from .protocol import (
     build_fullscreen_color,
@@ -23,10 +24,13 @@ from .protocol import (
     parse_packet,
 )
 from .renderer import MatrixRenderer
+from .runtime import MatrixRuntime
 from .session import SessionLogger
 from .simulator import MatrixSimulator
+from .testing import FakeTransport, FakeWrite
 from .types import (
     Color,
+    GifAckPolicy,
     GifTotalLengthMode,
     Pixel,
     Point,
@@ -43,11 +47,16 @@ __all__ = [
     "Color",
     "DEVICE_NAME_PREFIX",
     "DeviceNotFoundError",
+    "DeviceProfile",
+    "FakeTransport",
+    "FakeWrite",
+    "FrameOutput",
+    "GifAckPolicy",
     "GifTotalLengthMode",
     "HEIGHT",
-    "DeviceProfile",
     "MatrixFrame",
     "MatrixRenderer",
+    "MatrixRuntime",
     "MatrixSimulator",
     "NOTIFY_UUID",
     "OpenIDotMatrix",
@@ -57,6 +66,9 @@ __all__ = [
     "ProtocolError",
     "SERVICE_UUID",
     "SessionLogger",
+    "HardwareOutput",
+    "SimulatorOutput",
+    "TeeOutput",
     "TextBackgroundMode",
     "TextColorMode",
     "TextMode",

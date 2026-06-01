@@ -54,6 +54,9 @@ class BleTransport:
         self.client = None
         self._notification_queue: asyncio.Queue[bytes] | None = None
         self._user_notification_callback: NotificationCallback | None = None
+        self._notification_callbacks: list[NotificationCallback] = []
+        self._notifications_started = False
+        self.notification_history: list[bytes] = []
 
     @staticmethod
     def _coerce_session_logger(
@@ -182,26 +185,35 @@ class BleTransport:
             await self.connect()
         if self.client is None:  # pragma: no cover - defensive
             raise TransportError("BLE client was not initialized")
-        self._notification_queue = asyncio.Queue()
-        self._user_notification_callback = callback
+        if self._notification_queue is None:
+            self._notification_queue = asyncio.Queue()
+        if callback is not None and callback not in self._notification_callbacks:
+            self._notification_callbacks.append(callback)
+            self._user_notification_callback = callback
+        if self._notifications_started:
+            return
 
         def _callback(_sender, data: bytearray) -> None:
             payload = bytes(data)
+            self.notification_history.append(payload)
             if self.session_logger is not None:
                 self.session_logger.rx(payload, uuid=self.notify_uuid)
             if self._notification_queue is not None:
                 self._notification_queue.put_nowait(payload)
-            if self._user_notification_callback is not None:
-                self._user_notification_callback(payload)
+            for user_callback in tuple(self._notification_callbacks):
+                user_callback(payload)
 
         await self.client.start_notify(self.notify_uuid, _callback)
+        self._notifications_started = True
 
     async def stop_notifications(self) -> None:
         if self.client is not None and self.client.is_connected:
             with contextlib.suppress(Exception):
                 await self.client.stop_notify(self.notify_uuid)
+        self._notifications_started = False
         self._notification_queue = None
         self._user_notification_callback = None
+        self._notification_callbacks.clear()
 
     async def wait_for_notification(
         self,

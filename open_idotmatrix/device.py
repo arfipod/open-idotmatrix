@@ -38,6 +38,7 @@ from .text import render_text_bitmap_bytes
 from .transport import BleTransport, DiscoveredDevice
 from .types import (
     Color,
+    GifAckPolicy,
     GifTotalLengthMode,
     Pixel,
     TextBackgroundMode,
@@ -199,22 +200,52 @@ class OpenIDotMatrix:
         chunks,
         *,
         wait_for_ack: bool,
+        ack_policy: GifAckPolicy | str,
         response: bool,
         ack_timeout: float,
         sleep_between_chunks: float,
     ) -> list[dict]:
-        if wait_for_ack:
+        ack_policy = GifAckPolicy.NONE if not wait_for_ack else GifAckPolicy(ack_policy)
+        if ack_policy is not GifAckPolicy.NONE:
             await self.transport.start_notifications()
         results = []
         for index, chunk in enumerate(chunks):
             await self.transport.write(chunk.data, response=response)
             results.append(parse_packet(chunk.data))
-            if wait_for_ack:
-                expected = expected_gif_ack_for_chunk(index, len(chunks))
-                await self.transport.wait_for_notification(expected, timeout=ack_timeout)
+            if ack_policy is not GifAckPolicy.NONE:
+                await self._wait_for_gif_ack(index, len(chunks), policy=ack_policy, timeout=ack_timeout)
             elif sleep_between_chunks:
                 await asyncio.sleep(sleep_between_chunks)
         return results
+
+    async def _wait_for_gif_ack(
+        self,
+        index: int,
+        total_chunks: int,
+        *,
+        policy: GifAckPolicy,
+        timeout: float,
+    ) -> list[bytes]:
+        if policy is GifAckPolicy.EXACT:
+            return [
+                await self.transport.wait_for_notification(
+                    expected_gif_ack_for_chunk(index, total_chunks),
+                    timeout=timeout,
+                )
+            ]
+        if policy is GifAckPolicy.OK_OR_DONE:
+            return [await self.transport.wait_for_notification((ACK_CHUNK_OK, ACK_UPLOAD_DONE), timeout=timeout)]
+        if policy is GifAckPolicy.WAIT_DONE_AFTER_FINAL:
+            if index < total_chunks - 1:
+                return [await self.transport.wait_for_notification(ACK_CHUNK_OK, timeout=timeout)]
+            first = await self.transport.wait_for_notification((ACK_CHUNK_OK, ACK_UPLOAD_DONE), timeout=timeout)
+            received = [first]
+            if first == ACK_CHUNK_OK:
+                received.append(await self.transport.wait_for_notification(ACK_UPLOAD_DONE, timeout=timeout))
+            return received
+        if policy is GifAckPolicy.NONE:
+            return []
+        raise ValueError(f"unknown GIF ACK policy: {policy}")  # pragma: no cover
 
     async def gif(
         self,
@@ -223,16 +254,19 @@ class OpenIDotMatrix:
         process: bool = True,
         total_length_mode: GifTotalLengthMode | str | None = None,
         wait_for_ack: bool | None = None,
+        ack_policy: GifAckPolicy | str | None = None,
         response: bool = True,
         ack_timeout: float = 10.0,
         sleep_between_chunks: float = 1.0,
     ) -> list[dict]:
         total_length_mode = self.profile.gif_total_length_mode if total_length_mode is None else total_length_mode
         wait_for_ack = self.profile.gif_wait_for_ack if wait_for_ack is None else wait_for_ack
+        ack_policy = self.profile.gif_ack_policy if ack_policy is None else ack_policy
         chunks = gif_chunks_from_file(path, process=process, pixel_size=WIDTH, total_length_mode=total_length_mode)
         return await self._send_upload_chunks(
             chunks,
             wait_for_ack=wait_for_ack,
+            ack_policy=ack_policy,
             response=response,
             ack_timeout=ack_timeout,
             sleep_between_chunks=sleep_between_chunks,
@@ -244,16 +278,19 @@ class OpenIDotMatrix:
         *,
         total_length_mode: GifTotalLengthMode | str | None = None,
         wait_for_ack: bool | None = None,
+        ack_policy: GifAckPolicy | str | None = None,
         response: bool = True,
         ack_timeout: float = 10.0,
         sleep_between_chunks: float = 1.0,
     ) -> list[dict]:
         total_length_mode = self.profile.gif_total_length_mode if total_length_mode is None else total_length_mode
         wait_for_ack = self.profile.gif_wait_for_ack if wait_for_ack is None else wait_for_ack
+        ack_policy = self.profile.gif_ack_policy if ack_policy is None else ack_policy
         chunks = image_chunks_from_file(path, pixel_size=WIDTH, total_length_mode=total_length_mode)
         return await self._send_upload_chunks(
             chunks,
             wait_for_ack=wait_for_ack,
+            ack_policy=ack_policy,
             response=response,
             ack_timeout=ack_timeout,
             sleep_between_chunks=sleep_between_chunks,
@@ -265,6 +302,7 @@ class OpenIDotMatrix:
         *,
         total_length_mode: GifTotalLengthMode | str | None = None,
         wait_for_ack: bool | None = None,
+        ack_policy: GifAckPolicy | str | None = None,
         response: bool = True,
         ack_timeout: float = 10.0,
         sleep_between_chunks: float = 1.0,
@@ -273,10 +311,12 @@ class OpenIDotMatrix:
 
         total_length_mode = self.profile.gif_total_length_mode if total_length_mode is None else total_length_mode
         wait_for_ack = self.profile.gif_wait_for_ack if wait_for_ack is None else wait_for_ack
+        ack_policy = self.profile.gif_ack_policy if ack_policy is None else ack_policy
         chunks = image_chunks_from_image(frame.to_image(), pixel_size=WIDTH, total_length_mode=total_length_mode)
         return await self._send_upload_chunks(
             chunks,
             wait_for_ack=wait_for_ack,
+            ack_policy=ack_policy,
             response=response,
             ack_timeout=ack_timeout,
             sleep_between_chunks=sleep_between_chunks,

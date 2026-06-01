@@ -6,12 +6,15 @@ import argparse
 import asyncio
 import json
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from .constants import DEVICE_NAME_PREFIX
 from .device import OpenIDotMatrix
 from .exceptions import OpenIDotMatrixError, ProtocolError
+from .framebuffer import MatrixFrame
+from .profile import DeviceProfile
 from .protocol import parse_packet
 from .simulator import (
     MatrixSimulator,
@@ -19,7 +22,14 @@ from .simulator import (
     save_text_animation,
     simulate_text_frame,
 )
-from .types import GifTotalLengthMode, TextBackgroundMode, TextColorMode, TextMode, YearByteMode
+from .types import (
+    GifAckPolicy,
+    GifTotalLengthMode,
+    TextBackgroundMode,
+    TextColorMode,
+    TextMode,
+    YearByteMode,
+)
 
 
 def _json(data: Any) -> None:
@@ -64,7 +74,8 @@ async def _run_hardware_command(args: argparse.Namespace) -> None:
     if args.command == "image":
         _validate_file_arg(args.path, "image")
 
-    async with OpenIDotMatrix(address=args.address, session_logger=args.session_log) as matrix:
+    profile = DeviceProfile(address=args.address, gatt_chunk_size=args.gatt_chunk_size)
+    async with OpenIDotMatrix(profile=profile, session_logger=args.session_log) as matrix:
         command = args.command
         if command == "status":
             result = {
@@ -109,6 +120,7 @@ async def _run_hardware_command(args: argparse.Namespace) -> None:
                 process=not args.raw,
                 total_length_mode=GifTotalLengthMode(args.total_length_mode),
                 wait_for_ack=not args.no_ack,
+                ack_policy=GifAckPolicy(args.ack_policy),
                 response=not args.no_response,
                 ack_timeout=args.ack_timeout,
                 sleep_between_chunks=args.sleep_between_chunks,
@@ -118,6 +130,7 @@ async def _run_hardware_command(args: argparse.Namespace) -> None:
                 args.path,
                 total_length_mode=GifTotalLengthMode(args.total_length_mode),
                 wait_for_ack=not args.no_ack,
+                ack_policy=GifAckPolicy(args.ack_policy),
                 response=not args.no_response,
                 ack_timeout=args.ack_timeout,
                 sleep_between_chunks=args.sleep_between_chunks,
@@ -203,6 +216,174 @@ def _cmd_gif_preview(args: argparse.Namespace) -> None:
     _json([str(path) for path in paths])
 
 
+def _result_hexes(result: Any) -> list[str]:
+    if isinstance(result, dict):
+        return [str(result["hex"])] if "hex" in result else []
+    if isinstance(result, list):
+        values: list[str] = []
+        for item in result:
+            if isinstance(item, dict) and "hex" in item:
+                values.append(str(item["hex"]))
+        return values
+    return []
+
+
+def _generated_smoke_frame() -> MatrixFrame:
+    frame = MatrixFrame(fill=(0, 0, 0))
+    frame[0, 0] = (255, 0, 0)
+    frame[31, 0] = (0, 255, 0)
+    frame[0, 31] = (0, 0, 255)
+    frame[31, 31] = (255, 255, 255)
+    return frame
+
+
+async def _cmd_smoke_test(args: argparse.Namespace) -> None:
+    if args.gif:
+        _validate_file_arg(args.gif, "GIF")
+
+    tests: list[dict[str, Any]] = []
+
+    def add_entry(name: str, command: str, expected: str, status: str, **extra: Any) -> None:
+        entry = {"name": name, "command": command, "expected": expected, "status": status}
+        entry.update(extra)
+        tests.append(entry)
+
+    if not args.skip_scan:
+        try:
+            devices = await OpenIDotMatrix.scan(timeout=args.scan_timeout, name_prefix=args.name_prefix)
+        except Exception as exc:
+            add_entry("scan", "open-idotmatrix scan", "find IDM-* BLE device", "error", error=str(exc))
+        else:
+            add_entry(
+                "scan",
+                "open-idotmatrix scan",
+                "find IDM-* BLE device",
+                "pass" if devices else "needs_attention",
+                devices=[device.__dict__ for device in devices],
+            )
+
+    profile = DeviceProfile(address=args.address, gatt_chunk_size=args.gatt_chunk_size)
+    actual_address = args.address
+    async with OpenIDotMatrix(profile=profile, session_logger=args.session_log) as matrix:
+        address = matrix.transport.address or args.address or "<auto>"
+        actual_address = matrix.transport.address or args.address
+
+        async def run(name: str, command: str, expected: str, operation) -> None:
+            try:
+                result = await operation()
+            except Exception as exc:
+                add_entry(name, command, expected, "error", error=str(exc))
+            else:
+                add_entry(
+                    name,
+                    command,
+                    expected,
+                    "needs_user_confirmation",
+                    tx=_result_hexes(result),
+                    result=result,
+                )
+            if args.delay:
+                await asyncio.sleep(args.delay)
+
+        await run("on", f"open-idotmatrix --address {address} on", "screen turns on", matrix.on)
+        await run("off", f"open-idotmatrix --address {address} off", "screen turns off", matrix.off)
+        await run("on_again", f"open-idotmatrix --address {address} on", "screen turns on again", matrix.on)
+        await run(
+            "brightness_20",
+            f"open-idotmatrix --address {address} brightness 20",
+            "brightness visibly decreases",
+            lambda: matrix.set_brightness(20),
+        )
+        await run(
+            "brightness_80",
+            f"open-idotmatrix --address {address} brightness 80",
+            "brightness visibly increases",
+            lambda: matrix.set_brightness(80),
+        )
+        for name, color in (
+            ("fill_red", (255, 0, 0)),
+            ("fill_green", (0, 255, 0)),
+            ("fill_blue", (0, 0, 255)),
+            ("fill_black", (0, 0, 0)),
+        ):
+            await run(
+                name,
+                f"open-idotmatrix --address {address} fill {color[0]} {color[1]} {color[2]}",
+                f"display fills with RGB {color}",
+                lambda color=color: matrix.fill(color),
+            )
+        for name, x, y, color, expected in (
+            ("pixel_top_left", 0, 0, (255, 0, 0), "red pixel at logical 0,0"),
+            ("pixel_top_right", 31, 0, (0, 255, 0), "green pixel at logical 31,0"),
+            ("pixel_bottom_left", 0, 31, (0, 0, 255), "blue pixel at logical 0,31"),
+            ("pixel_bottom_right", 31, 31, (255, 255, 255), "white pixel at logical 31,31"),
+        ):
+            await run(
+                name,
+                f"open-idotmatrix --address {address} pixel {x} {y} {color[0]} {color[1]} {color[2]}",
+                expected,
+                lambda x=x, y=y, color=color: matrix.pixel(x, y, color),
+            )
+        for mode in YearByteMode:
+            await run(
+                f"sync_time_{mode.value}",
+                f"open-idotmatrix --address {address} sync-time --year-mode {mode.value}",
+                f"time sync succeeds with {mode.value}",
+                lambda mode=mode: matrix.sync_time(year_mode=mode),
+            )
+        await run(
+            "text_a",
+            f'open-idotmatrix --address {address} text "A" --mode 0 --rgb 255 255 255',
+            "white A appears",
+            lambda: matrix.text("A", mode=TextMode.FIXED, color=(255, 255, 255)),
+        )
+        await run(
+            "text_hello",
+            f'open-idotmatrix --address {address} text "Hello" --mode 1 --speed 95 --rgb 255 0 0',
+            "red Hello text scrolls",
+            lambda: matrix.text(
+                "Hello",
+                mode=TextMode.SCROLL_LEFT_TO_RIGHT,
+                speed=95,
+                color=(255, 0, 0),
+            ),
+        )
+        if not args.skip_gif:
+            upload_kwargs = {
+                "total_length_mode": GifTotalLengthMode(args.total_length_mode),
+                "wait_for_ack": not args.no_ack,
+                "ack_policy": GifAckPolicy(args.ack_policy),
+                "response": not args.no_response,
+                "ack_timeout": args.ack_timeout,
+                "sleep_between_chunks": args.sleep_between_chunks,
+            }
+            if args.gif:
+                await run(
+                    "gif",
+                    f"open-idotmatrix --address {address} gif {args.gif}",
+                    "GIF appears",
+                    lambda: matrix.gif(args.gif, process=not args.raw_gif, **upload_kwargs),
+                )
+            else:
+                await run(
+                    "generated_single_frame_gif",
+                    f"open-idotmatrix --address {address} smoke-test",
+                    "generated corner-color single-frame GIF appears",
+                    lambda: matrix.frame(_generated_smoke_frame(), **upload_kwargs),
+                )
+
+    report = {
+        "created_at": datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z"),
+        "address": actual_address,
+        "session_log": args.session_log,
+        "tests": tests,
+    }
+    out_path = Path(args.out)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(json.dumps(report, indent=2, sort_keys=True, default=str) + "\n", encoding="utf-8")
+    _json(report)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="open-idotmatrix",
@@ -210,6 +391,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--address", help="BLE MAC/address. If omitted, hardware commands connect to first IDM-* device found.")
     parser.add_argument("--session-log", help="Write TX/RX BLE events as JSONL to this path")
+    parser.add_argument("--gatt-chunk-size", type=int, help="Override BLE GATT write chunk size, e.g. 20 or 244")
     sub = parser.add_subparsers(dest="command", required=True)
 
     p = sub.add_parser("scan", help="Scan for IDM-* BLE devices")
@@ -269,6 +451,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--ack-timeout", type=float, default=10.0, help="Seconds to wait for each GIF ACK")
     p.add_argument("--sleep-between-chunks", type=float, default=1.0, help="Delay when sending GIF chunks without ACK")
     p.add_argument("--total-length-mode", choices=[m.value for m in GifTotalLengthMode], default=GifTotalLengthMode.INCLUDE_HEADERS.value)
+    p.add_argument("--ack-policy", choices=[m.value for m in GifAckPolicy], default=GifAckPolicy.EXACT.value)
 
     p = sub.add_parser("image", help="Distort any image to 1:1, subsample to 32x32, and upload it")
     p.add_argument("path")
@@ -277,6 +460,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--ack-timeout", type=float, default=10.0, help="Seconds to wait for each image ACK")
     p.add_argument("--sleep-between-chunks", type=float, default=1.0, help="Delay when sending image chunks without ACK")
     p.add_argument("--total-length-mode", choices=[m.value for m in GifTotalLengthMode], default=GifTotalLengthMode.INCLUDE_HEADERS.value)
+    p.add_argument("--ack-policy", choices=[m.value for m in GifAckPolicy], default=GifAckPolicy.EXACT.value)
 
     p = sub.add_parser("clock", help="Show device clock")
     p.add_argument("style", type=int)
@@ -343,6 +527,23 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--scale", type=int, default=16)
     p.add_argument("--max-frames", type=int, default=16)
     p.set_defaults(func=_cmd_gif_preview)
+
+    p = sub.add_parser("smoke-test", help="Run safe hardware smoke tests and write a JSON checklist")
+    p.add_argument("--out", default="out/smoke.json")
+    p.add_argument("--delay", type=float, default=0.2, help="Delay between visible hardware steps")
+    p.add_argument("--skip-scan", action="store_true")
+    p.add_argument("--scan-timeout", type=float, default=5.0)
+    p.add_argument("--name-prefix", default=DEVICE_NAME_PREFIX)
+    p.add_argument("--skip-gif", action="store_true")
+    p.add_argument("--gif", help="Optional GIF/image path to upload during the GIF step")
+    p.add_argument("--raw-gif", action="store_true", help="Do not resize/re-encode --gif; file must already be 32x32")
+    p.add_argument("--no-ack", action="store_true", help="Do not wait for GIF/frame ACK notifications")
+    p.add_argument("--no-response", action="store_true", help="Use GATT write without response for GIF/frame step")
+    p.add_argument("--ack-timeout", type=float, default=10.0)
+    p.add_argument("--sleep-between-chunks", type=float, default=1.0)
+    p.add_argument("--total-length-mode", choices=[m.value for m in GifTotalLengthMode], default=GifTotalLengthMode.INCLUDE_HEADERS.value)
+    p.add_argument("--ack-policy", choices=[m.value for m in GifAckPolicy], default=GifAckPolicy.EXACT.value)
+    p.set_defaults(func=_cmd_smoke_test)
 
     return parser
 

@@ -21,6 +21,14 @@ Create an open, testable, Linux-first library for controlling 32x32 iDotMatrix d
 - Bytearray-backed `MatrixFrame`, `MatrixRenderer`, and `DeviceProfile`.
 - JSONL session logging for BLE TX/RX.
 - Fast-path multi-pixel writes through `pixels_fast()` and `write_many_packets()`.
+- Idempotent notification startup with callback fan-out and notification history.
+- Configurable GIF ACK policy: exact, OK-or-done, wait-done-after-final, or none.
+- CLI `--gatt-chunk-size` override for MTU/write-splitting experiments.
+- Safe `smoke-test` command with JSON report output.
+- Official `FakeTransport` for app/tests without hardware.
+- Synchronous `MatrixRuntime` for Pygame-style loops with latest-frame backpressure.
+- Simulator, hardware, and tee frame outputs for app preview plus device rendering.
+- Application/game documentation that keeps per-frame work inside the library API instead of CLI subprocesses.
 - Hardware-free unit tests.
 - Protocol, Linux BLE, simulator, reverse engineering, and Codex documentation.
 - GitHub Actions CI.

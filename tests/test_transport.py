@@ -31,12 +31,18 @@ class FakeClient:
     def __init__(self):
         self.writes = []
         self.notification_callback = None
+        self.start_notify_calls = 0
+        self.stop_notify_calls = 0
 
     async def write_gatt_char(self, uuid, data, *, response=False):
         self.writes.append((uuid, bytes(data), response))
 
     async def start_notify(self, _uuid, callback):
+        self.start_notify_calls += 1
         self.notification_callback = callback
+
+    async def stop_notify(self, _uuid):
+        self.stop_notify_calls += 1
 
 
 @pytest.mark.asyncio
@@ -66,3 +72,25 @@ async def test_write_many_packets_and_session_logger(tmp_path):
     assert lines[-1]["direction"] == "rx"
     assert lines[-1]["uuid"] == NOTIFY_UUID
     assert lines[-1]["kind"] == "ack_chunk_ok"
+
+
+@pytest.mark.asyncio
+async def test_start_notifications_is_idempotent_and_keeps_callbacks():
+    client = FakeClient()
+    transport = BleTransport(address="test-device")
+    transport.client = client
+    calls = []
+
+    await transport.start_notifications(lambda payload: calls.append(("first", payload)))
+    await transport.start_notifications(lambda payload: calls.append(("second", payload)))
+    await transport.start_notifications()
+
+    assert client.start_notify_calls == 1
+    client.notification_callback(NOTIFY_UUID, bytearray(ACK_CHUNK_OK))
+
+    assert calls == [("first", ACK_CHUNK_OK), ("second", ACK_CHUNK_OK)]
+    assert transport.notification_history == [ACK_CHUNK_OK]
+    assert await transport.wait_for_notification(ACK_CHUNK_OK, timeout=0.01) == ACK_CHUNK_OK
+
+    await transport.stop_notifications()
+    assert client.stop_notify_calls == 1

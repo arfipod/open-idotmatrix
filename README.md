@@ -2,6 +2,8 @@
 
 Open toolkit for controlling and studying **32x32 RGB iDotMatrix** displays from Linux with Python.
 
+![iDotMatrix showing a photo rendered as a pixel image](docs/assets/matrix-photo-display.jpeg)
+
 This repository is intended as a clean starting point for:
 
 - controlling the matrix over Bluetooth Low Energy from Linux;
@@ -35,6 +37,7 @@ open-idotmatrix/
     PROTOCOL.md
     ROADMAP.md
     CODEX_BRIEF.md
+    APPLICATIONS.md
     REVERSE_ENGINEERING.md
     SIMULATOR.md
     LINUX_BLUETOOTH.md
@@ -148,6 +151,19 @@ Record sent bytes and received notifications during hardware sessions:
 open-idotmatrix --address AA:BB:CC:DD:EE:FF --session-log out/session.jsonl text "Hello"
 ```
 
+Run a safe hardware checklist and save the result:
+
+```bash
+open-idotmatrix --address AA:BB:CC:DD:EE:FF --session-log out/smoke.jsonl smoke-test --out out/smoke.json
+```
+
+For BLE/GIF experiments, override GATT splitting and ACK behavior explicitly:
+
+```bash
+open-idotmatrix --address AA:BB:CC:DD:EE:FF --gatt-chunk-size 20 gif demo.gif --ack-policy wait_done_after_final
+open-idotmatrix --address AA:BB:CC:DD:EE:FF --gatt-chunk-size 244 gif demo.gif --ack-policy ok_or_done
+```
+
 ## Qt Application
 
 The PySide6 app exposes the same operation families as the CLI:
@@ -204,6 +220,17 @@ async def main():
 
 asyncio.run(main())
 ```
+
+For hardware-free tests of apps that use this package:
+
+```python
+from open_idotmatrix import FakeTransport, OpenIDotMatrix
+
+transport = FakeTransport()
+matrix = OpenIDotMatrix(transport=transport)
+```
+
+More app and game patterns are in [`docs/APPLICATIONS.md`](docs/APPLICATIONS.md).
 
 ## Known Protocol Summary
 

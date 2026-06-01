@@ -123,3 +123,12 @@ class GifTotalLengthMode(str, Enum):
 
     INCLUDE_HEADERS = "include_headers"
     RAW_PAYLOAD_ONLY = "raw_payload_only"
+
+
+class GifAckPolicy(str, Enum):
+    """How strictly to wait for GIF/image upload ACK notifications."""
+
+    EXACT = "exact"
+    OK_OR_DONE = "ok_or_done"
+    WAIT_DONE_AFTER_FINAL = "wait_done_after_final"
+    NONE = "none"

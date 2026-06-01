@@ -77,6 +77,18 @@ sudo btmon | tee captures/session.btmon.txt
 
 While `btmon` is active, run commands from another terminal.
 
+For a library-side JSONL trace of writes and notifications:
+
+```bash
+open-idotmatrix --address AA:BB:CC:DD:EE:FF --session-log out/session.jsonl text "Hello"
+```
+
+For a safe first hardware pass:
+
+```bash
+open-idotmatrix --address AA:BB:CC:DD:EE:FF --session-log out/smoke.jsonl smoke-test --out out/smoke.json
+```
+
 ## Common Problems
 
 ### The Device Does Not Appear
@@ -92,7 +104,8 @@ While `btmon` is active, run commands from another terminal.
 - Try `reset`.
 - Try `--no-response` for GIFs.
 - Try short commands first: `on`, `off`, `fill`.
-- Add session logging as a roadmap task.
+- Add `--session-log out/session.jsonl`.
+- Try an explicit write split size: `--gatt-chunk-size 20` or `--gatt-chunk-size 244`.
 
 ### GIF Fails
 
@@ -103,6 +116,8 @@ open-idotmatrix --address ... gif demo.gif --total-length-mode include_headers
 open-idotmatrix --address ... gif demo.gif --total-length-mode raw_payload_only
 open-idotmatrix --address ... gif demo.gif --no-ack
 open-idotmatrix --address ... gif demo.gif --no-response
+open-idotmatrix --address ... gif demo.gif --ack-policy ok_or_done
+open-idotmatrix --address ... gif demo.gif --ack-policy wait_done_after_final
 ```
 
 Record which one works.
