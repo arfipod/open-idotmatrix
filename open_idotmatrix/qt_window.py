@@ -858,6 +858,7 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event) -> None:  # noqa: N802 - Qt API
         self.stop_game()
+        self._terminate_processes()
         super().closeEvent(event)
 
     def _game_action_for_key(self, key: int) -> str | None:
@@ -1065,6 +1066,7 @@ class MainWindow(QMainWindow):
         process.setProgram(sys.executable)
         process.setArguments(args)
         process.setProcessChannelMode(QProcess.ProcessChannelMode.SeparateChannels)
+        process.setProperty("had_error", False)
         process.finished.connect(
             lambda exit_code, exit_status, current=process: self._finish_process_json(
                 title,
@@ -1089,6 +1091,8 @@ class MainWindow(QMainWindow):
         *,
         on_success: Callable[[Any], None] | None = None,
     ) -> None:
+        if process not in self._processes:
+            return
         stdout = bytes(process.readAllStandardOutput()).decode(errors="replace").strip()
         stderr = bytes(process.readAllStandardError()).decode(errors="replace").strip()
         self._forget_process(process)
@@ -1110,11 +1114,15 @@ class MainWindow(QMainWindow):
             on_success(result)
 
     def _fail_process_start(self, title: str, process: QProcess, error: QProcess.ProcessError) -> None:
+        if process not in self._processes:
+            return
+        process.setProperty("had_error", True)
         message = process.errorString() or str(error)
-        self._forget_process(process)
-        process.deleteLater()
         self._append_text(f"error: {message}")
         self._set_status(f"Error: {title}")
+        if error == QProcess.ProcessError.FailedToStart:
+            self._forget_process(process)
+            process.deleteLater()
 
     def _populate_devices(self, devices: list[dict[str, Any]]) -> None:
         self.device_combo.blockSignals(True)
@@ -1173,6 +1181,30 @@ class MainWindow(QMainWindow):
     def _forget_process(self, process: QProcess) -> None:
         if process in self._processes:
             self._processes.remove(process)
+
+    def _terminate_processes(self) -> None:
+        for process in list(self._processes):
+            try:
+                process.finished.disconnect()
+            except (RuntimeError, TypeError):
+                pass
+            try:
+                process.errorOccurred.disconnect()
+            except (RuntimeError, TypeError):
+                pass
+            try:
+                if process.state() != QProcess.ProcessState.NotRunning:
+                    process.terminate()
+                    if not process.waitForFinished(1500):
+                        process.kill()
+                        process.waitForFinished(1500)
+            except RuntimeError:
+                pass
+            self._forget_process(process)
+            try:
+                process.deleteLater()
+            except RuntimeError:
+                pass
 
     def _browse_open(self, line_edit: QLineEdit, title: str) -> None:
         path, _selected = QFileDialog.getOpenFileName(self, title)
